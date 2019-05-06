@@ -465,6 +465,7 @@ var SyscallsLibrary = {
   },
   __syscall91: function(which, varargs) { // munmap
     var addr = SYSCALLS.get(), len = SYSCALLS.get();
+    if (addr < 0 || len == 0) return -ERRNO_CODES.EINVAL;
     // TODO: support unmmap'ing parts of allocations
     var info = SYSCALLS.mappings[addr];
     if (!info) return 0;

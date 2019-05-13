@@ -971,7 +971,7 @@ var SyscallsLibrary = {
     off <<= 12; // undo pgoffset
     var ptr;
     var allocated = false;
-    if (fd === -1) {
+    if ((flags & {{{ cDefine('MAP_ANONYMOUS') }}}) !== 0) {
       ptr = _memalign(PAGE_SIZE, len);
       if (!ptr) return -ERRNO_CODES.ENOMEM;
       _memset(ptr, 0, len);

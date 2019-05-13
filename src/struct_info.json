@@ -894,6 +894,7 @@
     {
         "file": "bits/mman.h",
         "defines": [
+            "MAP_ANONYMOUS",
             "MAP_PRIVATE"
         ],
         "structs": {}

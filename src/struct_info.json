@@ -896,7 +896,8 @@
         "defines": [
             "MAP_ANONYMOUS",
             "MAP_FIXED",
-            "MAP_PRIVATE"
+            "MAP_PRIVATE",
+            "PROT_WRITE"
         ],
         "structs": {}
     },

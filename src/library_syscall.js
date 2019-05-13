@@ -971,6 +971,11 @@ var SyscallsLibrary = {
     off <<= 12; // undo pgoffset
     var ptr;
     var allocated = false;
+
+    if ((flags & {{{ cDefine('MAP_FIXED') }}}) !== 0 && (addr % PAGE_SIZE) !== 0) {
+      return -ERRNO_CODES.EINVAL;
+    }
+
     if ((flags & {{{ cDefine('MAP_ANONYMOUS') }}}) !== 0) {
       ptr = _memalign(PAGE_SIZE, len);
       if (!ptr) return -ERRNO_CODES.ENOMEM;

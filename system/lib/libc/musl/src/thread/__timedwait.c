@@ -86,6 +86,7 @@ int __timedwait(volatile int *addr, int val,
 
 #ifdef __EMSCRIPTEN__
 	__pthread_setcancelstate(PTHREAD_CANCEL_MASKED, &cs);
+	if (cs == PTHREAD_CANCEL_DISABLE) __pthread_setcancelstate(cs, 0);
 	emscripten_conditional_set_current_thread_status(EM_THREAD_STATUS_RUNNING, EM_THREAD_STATUS_WAITMUTEX);
 #else
 	__pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);

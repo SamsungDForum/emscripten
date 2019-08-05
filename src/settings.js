@@ -1312,6 +1312,7 @@ var ENVIRONMENT_MAY_BE_WEB = 1;
 var ENVIRONMENT_MAY_BE_WORKER = 1;
 var ENVIRONMENT_MAY_BE_NODE = 1;
 var ENVIRONMENT_MAY_BE_SHELL = 1;
+var ENVIRONMENT_MAY_BE_TIZEN = 0;
 
 // passes information to emscripten.py about whether to minify
 // JS -> asm.js import names. Controlled by optimization level, enabled

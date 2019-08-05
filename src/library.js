@@ -3628,6 +3628,232 @@ LibraryManager.library = {
   // ==========================================================================
   // netdb.h
   // ==========================================================================
+#if ENVIRONMENT_MAY_BE_TIZEN
+  _hrstorage: {
+    HOST_BUFFER_SIZE: 1024,
+    MAX_HOST_ADDRESSES: 35,
+    MAX_HOST_ALIASES: 35,
+    host: {{{ makeStaticAlloc(C_STRUCTS.hostent.__size__) }}},
+    hostAliasPtrs: {{{ makeStaticAlloc(35) }}}, // max host aliases
+    hostAddrPtrs: {{{ makeStaticAlloc(35) }}}, // max addresses
+    hostBuffer: {{{ makeStaticAlloc(1024) }}}, // host buffer size
+  },
+  _clear_host: function() {
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_name, '0', 'i8**') }}};
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_addrtype, '0', 'i8**') }}};
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_length, '0', 'i8**') }}};
+  },
+
+  _gethostbyaddr__deps: ['_hrstorage', '_store_host_ent', '_int_to_family'],
+  _gethostbyaddr: function(addrPtr, len, type, hNamePtr, hostAliasPtrs,
+    hAddrtypePtr, hLengthPtr, hostAddrPtrs, hostBufferPtr) {
+
+    const hr = new HostResolverSync();
+    const addr = HEAPU8.subarray(addrPtr, addrPtr + len);
+    let result;
+    try {
+      result = hr.getHostByAddr(new NetAddress(__int_to_family(type), addr, 0));
+    } catch (e) {
+      const err = hr.errorno > 0 ? hr.errorno : 1;
+      return err;
+    }
+
+    return __store_host_ent(
+        result,
+        hNamePtr,
+        hostAliasPtrs,
+        hAddrtypePtr,
+        hLengthPtr,
+        hostAddrPtrs,
+        __hrstorage.MAX_HOST_ADDRESSES,
+        __hrstorage.MAX_HOST_ALIASES,
+        hostBufferPtr,
+        __hrstorage.HOST_BUFFER_SIZE
+    );
+  },
+
+  _gethostbyname__deps: ['_hrstorage', '_store_host_ent'],
+  _gethostbyname: function(name, hNamePtr, hostAliasPtrs, hAddrtypePtr,
+      hLengthPtr, hostAddrPtrs, hostBufferPtr) {
+    const hr = new HostResolverSync();
+
+    try {
+      const result =
+          hr.getHostByName(name);
+
+      if (!result) {
+        const errno = hr.errorno;
+        console.log(`HostResolver js_setsockopt error on socket setsockopt` +
+              `errno: [${errno}]`);
+        return errno;
+      }
+
+      return __store_host_ent(
+          result,
+          hNamePtr,
+          hostAliasPtrs,
+          hAddrtypePtr,
+          hLengthPtr,
+          hostAddrPtrs,
+          __hrstorage.MAX_HOST_ADDRESSES,
+          __hrstorage.MAX_HOST_ALIASES,
+          hostBufferPtr,
+          __hrstorage.HOST_BUFFER_SIZE);
+    } catch(err) {
+      const error = hr.errorno > 0 ? hr.errorno : 1;
+      return error;
+    }
+  },
+  _store_host_ent__deps: ['_family_to_int'],
+  _store_host_ent: function(
+    hostEnt, hNamePtr, hostAliasPtrs, hAddrtypePtr, hLengthPtr,
+    hostAddrPtrs, maxHostAddresses, maxHostAliases,
+    hostBufferPtr, hostBufferSize) {
+    let usedBuffer = 0;
+    if (hostEnt) {
+      HEAP32[hAddrtypePtr >> 2] = 0;
+      HEAP32[hLengthPtr >> 2] = 0;
+
+      if (hostEnt.name.length > 0) {
+        HEAP32[hNamePtr >> 2] = hostBufferPtr;
+        const name = new TextEncoder().encode(hostEnt.name);
+        HEAP8.set(name, hostBufferPtr);
+        usedBuffer += name.length;
+        HEAP8[hostBufferPtr+usedBuffer] = 0;
+        usedBuffer++;
+      } else {
+        HEAP32[hNamePtr >> 2] = 0;
+      }
+
+      const addrList = hostEnt.getAddrList();
+      if (addrList.length > 0) {
+        let item = 0;
+        // eslint-disable-next-line guard-for-in
+        for (item in addrList) {
+          const bufferEnd = usedBuffer + addrList[item].bytes.length + 1;
+          if (item >= maxHostAddresses || bufferEnd > hostBufferSize) {
+            HEAP32[(hostAddrPtrs >> 2) + parseInt(item)] = 0;
+            break;
+          }
+          HEAP32[hAddrtypePtr >> 2] = __family_to_int(addrList[item].family);
+          HEAP32[hLengthPtr >> 2] = addrList[item].bytes.length;
+          HEAP32[(hostAddrPtrs >> 2) + parseInt(item)] =
+              hostBufferPtr + usedBuffer;
+          HEAPU8.set(addrList[item].bytes, hostBufferPtr + usedBuffer);
+          usedBuffer += addrList[item].bytes.length;
+          HEAP8[hostBufferPtr + usedBuffer] = 0;
+          usedBuffer++;
+        }
+        HEAP32[(hostAddrPtrs >> 2) + parseInt(item) + 1] = 0;
+      } else {
+        HEAP32[hostAddrPtrs >> 2] = 0;
+      }
+
+      const aliases = hostEnt.getAliases();
+      if (aliases.length > 0) {
+        let item = 0;
+        // eslint-disable-next-line guard-for-in
+        for (item in aliases) {
+          const bufferEnd = usedBuffer + aliases[item].length + 1;
+          if (item >= maxHostAliases || bufferEnd > hostBufferSize) {
+            HEAP32[(hostAliasPtrs >> 2) + parseInt(item)] = 0;
+            break;
+          }
+          HEAP32[(hostAliasPtrs >> 2) + parseInt(item)] =
+              hostBufferPtr + usedBuffer;
+          HEAP8.set(
+              new TextEncoder().encode(aliases[item]),
+              hostBufferPtr + usedBuffer
+          );
+          usedBuffer += aliases[item].length;
+          HEAP8[hostBufferPtr + usedBuffer] = 0;
+          usedBuffer++;
+        }
+        HEAP32[(hostAliasPtrs >> 2) + parseInt(item) + 1] = 0;
+      } else {
+        HEAP32[hostAliasPtrs >> 2] = 0;
+      }
+    }
+    return 0;
+  },
+
+  _family: {
+    AF_UNSPEC:{name: 'af_unspec', value: {{{ cDefine('AF_UNSPEC') }}} },
+    AF_INET: {name: 'af_inet', value: {{{ cDefine('AF_INET') }}} },
+    AF_INET6: {name: 'af_inet6', value: {{{ cDefine('AF_INET6') }}} },
+  },
+  _sock_type: {
+    SOCK_ANY:{name: 'sock_any', value: 0 },
+    SOCK_STREAM: {name: 'sock_stream', value: {{{ cDefine('SOCK_STREAM') }}} },
+    SOCK_DGRAM: {name: 'sock_dgram', value: {{{ cDefine('SOCK_DGRAM') }}} },
+  },
+  _protocol: {
+    IPPROTO_IP:{name: 'ipproto_ip', value: 0 },
+    IPPROTO_TCP: {name: 'ipproto_tcp', value: 6 },
+    IPPROTO_UDP: {name: 'ipproto_udp', value: 17 },
+  },
+
+  _convert_to_enum: function(object, integer) {
+    for (const key in object) {
+      if (object[key].value === integer) {
+        return object[key].name;
+      }
+    }
+    return null;
+  },
+  _convert_to_int: function(object, enumeration) {
+    for (const key in object) {
+      if (object[key].name === enumeration) {
+        return object[key].value;
+      }
+    }
+  },
+  _int_to_family__deps: ['_convert_to_enum', '_family'],
+  _int_to_family: function(family) {
+    return __convert_to_enum(__family, family)
+  },
+  _family_to_int__deps: ['_convert_to_int', '_family'],
+  _family_to_int: function(family) {
+    return __convert_to_int(__family, family)
+  },
+
+  _int_to_sock_type__deps: ['_convert_to_enum', '_sock_type'],
+  _int_to_sock_type: function(family) {
+    return __convert_to_enum(__sock_type, family)
+  },
+  _sock_type_to_int__deps: ['_convert_to_int', '_sock_type'],
+  _sock_type_to_int: function(family) {
+    return __convert_to_int(__sock_type, family)
+  },
+
+  _int_to_protocol__deps: ['_convert_to_enum', '_protocol'],
+  _int_to_protocol: function(family) {
+    return __convert_to_enum(__protocol, family)
+  },
+  _protocol_to_int__deps: ['_convert_to_int', '_protocol'],
+  _protocol_to_int: function(family) {
+    return __convert_to_int(__protocol, family)
+  },
+
+  _freeaddrinfo__deps: ['free'],
+  _freeaddrinfo: function(addrinfo) {
+    let ptr = addrinfo;
+    while(ptr !== 0) {
+      const helper = ptr;
+      const addr = HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_addr }}})>>2];
+      const canonName = HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_canonname }}})>>2];
+      ptr = HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_next }}})>>2];
+      if (addr) {
+        _free(addr);
+      }
+      if (canonName) {
+        _free(canonName);
+      }
+      _free(helper);
+    }
+  },
+
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
 
   _inet_pton4_raw: function(str) {
     var b = str.split('.');
@@ -3815,14 +4041,14 @@ LibraryManager.library = {
 
     switch (family) {
       case {{{ cDefine('AF_INET') }}}:
-        if (salen !== {{{ C_STRUCTS.sockaddr_in.__size__ }}}) {
+        if (salen < {{{ C_STRUCTS.sockaddr_in.__size__ }}}) {
           return { errno: {{{ cDefine('EINVAL') }}} };
         }
         addr = {{{ makeGetValue('sa', C_STRUCTS.sockaddr_in.sin_addr.s_addr, 'i32') }}};
         addr = __inet_ntop4_raw(addr);
         break;
       case {{{ cDefine('AF_INET6') }}}:
-        if (salen !== {{{ C_STRUCTS.sockaddr_in6.__size__ }}}) {
+        if (salen < {{{ C_STRUCTS.sockaddr_in6.__size__ }}}) {
           return { errno: {{{ cDefine('EINVAL') }}} };
         }
         addr = [
@@ -3840,27 +4066,49 @@ LibraryManager.library = {
     return { family: family, addr: addr, port: port };
   },
   _write_sockaddr__deps: ['$Sockets', '_inet_pton4_raw', '_inet_pton6_raw'],
-  _write_sockaddr: function (sa, family, addr, port) {
+  _write_sockaddr: function (sa, salen, family, addr, port) {
+    let addrlen = {{{ C_STRUCTS.sockaddr_in6.__size__ }}}; // Max value from ipv4 and ipv6
+    if (salen !== 0) {
+      addrlen = {{{ makeGetValue('salen', 0, 'i32') }}}
+    }
+    // if addrlen is sufficent the actual lenth is returned
+    // in case addrlen is too small the begin of address is copied
+    // and the required size is returned
+    // more info can be found in getsockname man
+
     switch (family) {
       case {{{ cDefine('AF_INET') }}}:
-        addr = __inet_pton4_raw(addr);
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_family, 'family', 'i16') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_addr.s_addr, 'addr', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_port, '_htons(port)', 'i16') }}};
+        if (addrlen >= 2) {
+          addr = __inet_pton4_raw(addr);
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_family, 'family', 'i16') }}};
+        }
+        if (addrlen >= {{{ C_STRUCTS.sockaddr_in.__size__ }}}) {
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_addr.s_addr, 'addr', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in.sin_port, '_htons(port)', 'i16') }}};
+        }
+        addrlen = {{{ C_STRUCTS.sockaddr_in.__size__ }}};
         break;
       case {{{ cDefine('AF_INET6') }}}:
+        if (addrlen >= 4) {
         addr = __inet_pton6_raw(addr);
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_family, 'family', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+0, 'addr[0]', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+4, 'addr[1]', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+8, 'addr[2]', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+12, 'addr[3]', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_port, '_htons(port)', 'i16') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_flowinfo, '0', 'i32') }}};
-        {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_scope_id, '0', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_family, 'family', 'i32') }}};
+        }
+        if (addrlen >= {{{ C_STRUCTS.sockaddr_in6.__size__ }}}) {
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+0, 'addr[0]', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+4, 'addr[1]', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+8, 'addr[2]', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr+12, 'addr[3]', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_port, '_htons(port)', 'i16') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_flowinfo, '0', 'i32') }}};
+          {{{ makeSetValue('sa', C_STRUCTS.sockaddr_in6.sin6_scope_id, '0', 'i32') }}};
+        }
+        addrlen = {{{ C_STRUCTS.sockaddr_in6.__size__ }}};
         break;
       default:
         return { errno: {{{ cDefine('EAFNOSUPPORT') }}} };
+    }
+    if (salen !== 0) {
+      {{{ makeSetValue('salen', 0, 'addrlen', 'i32') }}};
     }
     // kind of lame, but let's match _read_sockaddr's interface
     return {};
@@ -3916,6 +4164,60 @@ LibraryManager.library = {
     }
   },
 
+
+
+#if ENVIRONMENT_MAY_BE_TIZEN
+  // note: lots of leaking here!
+  gethostbyaddr__deps: ['_gethostbyaddr', '_clear_host'],
+  gethostbyaddr__sig: 'iiii',
+  gethostbyaddr: function (addr_ptr, addrlen, type) {
+    __clear_host();
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_aliases, '__hrstorage.hostAliasPtrs', 'i8**') }}};
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_addr_list, '__hrstorage.hostAddrPtrs', 'i8**') }}};
+
+    const result = __gethostbyaddr(
+        addr_ptr,
+        addrlen,
+        type,
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_name }}},
+        __hrstorage.hostAliasPtrs,
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_addrtype }}},
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_length }}},
+        __hrstorage.hostAddrPtrs,
+        __hrstorage.hostBuffer
+    );
+    if (result !== 0) {
+      // TODO(j.gajownik2) set herrno
+      return null;
+    }
+    return __hrstorage.host;
+  },
+
+  gethostbyname__deps: ['_gethostbyname', '_clear_host', '_hrstorage'],
+  gethostbyname__sig: 'ii',
+  gethostbyname: function(name) {
+    name = UTF8ToString(name) + '\0';
+    __clear_host();
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_aliases, '__hrstorage.hostAliasPtrs', 'i8**') }}};
+    {{{ makeSetValue('__hrstorage.host', C_STRUCTS.hostent.h_addr_list, '__hrstorage.hostAddrPtrs', 'i8**') }}};
+
+    const result = this.__gethostbyname(
+        name,
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_name }}},
+        __hrstorage.hostAliasPtrs,
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_addrtype }}},
+        __hrstorage.host + {{{ C_STRUCTS.hostent.h_length }}},
+        __hrstorage.hostAddrPtrs,
+        __hrstorage.hostBuffer
+    );
+    if (result !== 0) {
+      // TODO(j.gajownik2) set herrno
+      return null;
+    }
+    return __hrstorage.host;
+  },
+#else
+
   // note: lots of leaking here!
   gethostbyaddr__deps: ['$DNS', 'gethostbyname', '_inet_ntop4_raw'],
   gethostbyaddr__proxy: 'sync',
@@ -3960,6 +4262,7 @@ LibraryManager.library = {
     {{{ makeSetValue('ret', C_STRUCTS.hostent.h_addr_list, 'addrListBuf', 'i8**') }}};
     return ret;
   },
+#endif
 
   gethostbyname_r__deps: ['gethostbyname'],
   gethostbyname_r__proxy: 'sync',
@@ -3971,6 +4274,127 @@ LibraryManager.library = {
     {{{ makeSetValue('err', '0', '0', 'i32') }}};
     {{{ makeSetValue('out', '0', 'ret', '*') }}};
     return 0;
+  },
+
+#if ENVIRONMENT_MAY_BE_TIZEN
+  freeaddrinfo__deps: ['_freeaddrinfo'],
+  freeaddrinfo__sig: 'vi',
+  freeaddrinfo: function(ptr) {
+    __freeaddrinfo(ptr);
+  },
+
+  getaddrinfo__deps: ['_int_to_family', '_family_to_int', '_int_to_sock_type', '_sock_type_to_int', '_int_to_protocol', '_protocol_to_int', '_family', '_freeaddrinfo'],
+  getaddrinfo__sig: 'iiiii',
+  getaddrinfo: function(nodePtr, servicePtr, hintsPtr, resPtr) {
+    const hr = new HostResolverSync();
+
+    const strlen = function(ptr) {
+      let len = 0;
+      while (HEAP8[ptr + len]) {
+        len++;
+      }
+      return len;
+    };
+
+    const node = nodePtr
+      ? new TextDecoder('utf-8').decode(
+          HEAPU8.slice(nodePtr,
+            nodePtr + strlen(nodePtr) + 1))
+      : '';
+    const service = servicePtr
+      ? new TextDecoder('utf-8').decode(
+          HEAPU8.slice(servicePtr,
+            servicePtr + strlen(servicePtr) + 1))
+      : '';
+
+    let flags = 0;
+    let family = __family.AF_UNSPEC.value;
+    let socktype = 0;
+    let protocol = 0;
+    if (hintsPtr) {
+      flags = HEAP32[(hintsPtr + {{{ C_STRUCTS.addrinfo.ai_flags }}})>>2];
+      family = HEAP32[(hintsPtr + {{{ C_STRUCTS.addrinfo.ai_family }}})>>2];
+      socktype = HEAP32[(hintsPtr + {{{ C_STRUCTS.addrinfo.ai_socktype }}})>>2];
+      protocol = HEAP32[(hintsPtr + {{{ C_STRUCTS.addrinfo.ai_protocol }}})>>2];
+    }
+
+    family = __int_to_family(family);
+    if (family === null) {
+      return {{{ cDefine('EAI_FAMILY') }}};
+    }
+    socktype = __int_to_sock_type(socktype);
+    if (socktype === null) {
+      return {{{ cDefine('EAI_SOCKTYPE') }}};
+    }
+    protocol = __int_to_protocol(protocol);
+
+    const hint =
+        new AddressInfo(flags, family, socktype, protocol, null, null);
+
+    try {
+      const addrList = hr.getAddrInfo(node, service, hint);
+
+      let i = 0;
+      let prev;
+      let head = 0;
+      for (const item of addrList) {
+        const ptr = _malloc({{{ C_STRUCTS.addrinfo.__size__ }}});
+        if (ptr === 0 && head !== 0) {
+          __freeaddrinfo(head);
+          return {{{ cDefine('EAI_MEMORY') }}};
+        }
+        if (i === 0) {
+          head = ptr;
+        }
+
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_flags }}})>>2] = item.flags;
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_family }}})>>2] = __family_to_int(item.family);
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_socktype }}})>>2] = __sock_type_to_int(item.sockType);
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_protocol }}})>>2] = __protocol_to_int(item.protocol);
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_addrlen }}})>>2] = item.addr.bytes.length;
+        if (item.addr.bytes.length > 0) {
+          const addr = _malloc(item.addr.bytes.length);
+          if (addr === 0 && head !== 0) {
+            __freeaddrinfo(head);
+            return {{{ cDefine('EAI_MEMORY') }}};
+          }
+          HEAP8.set(item.addr.bytes, addr);
+          HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_addr }}})>>2] = addr;
+        } else {
+          HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_addr }}})>>2] = 0;
+        }
+
+        if (item.canonName.length > 0) {
+          const canonNamePtr = _malloc(item.canonName.length);
+          if (canonNamePtr === 0 && head !== 0) {
+            __freeaddrinfo(head);
+            return {{{ cDefine('EAI_MEMORY') }}};
+          }
+          HEAP8.set(item.canonName, canonNamePtr);
+          HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_canonname }}})>>2] = canonNamePtr;
+        } else {
+          HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_canonname }}})>>2] = 0;
+        }
+        HEAP32[(ptr + {{{ C_STRUCTS.addrinfo.ai_next }}})>>2] = 0;
+        if (i !== 0) {
+          HEAP32[(prev + {{{ C_STRUCTS.addrinfo.ai_next }}})>>2] = ptr;
+        }
+        prev = ptr;
+        i += 1;
+      }
+
+      HEAP32[resPtr>>2] = head;
+      return 0;
+    } catch(err) {
+      return hr.errorno;
+    }
+  },
+#else  // ENVIRONMENT_MAY_BE_TIZEN
+  freeaddrinfo__deps: ['free'],
+  freeaddrinfo__proxy: 'sync',
+  freeaddrinfo__sig: 'vi',
+  freeaddrinfo: function(ptr) {
+    _free(ptr);
   },
 
   getaddrinfo__deps: ['$Sockets', '$DNS', '_inet_pton4_raw', '_inet_ntop4_raw', '_inet_pton6_raw', '_inet_ntop6_raw', '_write_sockaddr'],
@@ -4001,7 +4425,7 @@ LibraryManager.library = {
         __inet_ntop6_raw(addr) :
         __inet_ntop4_raw(addr);
       sa = _malloc(salen);
-      res = __write_sockaddr(sa, family, addr, port);
+      res = __write_sockaddr(sa, 0, family, addr, port);
       assert(!res.errno);
 
       ai = _malloc({{{ C_STRUCTS.addrinfo.__size__ }}});
@@ -4144,6 +4568,7 @@ LibraryManager.library = {
     {{{ makeSetValue('out', '0', 'ai', '*') }}};
     return 0;
   },
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
 
   getnameinfo__deps: ['$Sockets', '$DNS', '_read_sockaddr'],
   getnameinfo: function (sa, salen, node, nodelen, serv, servlen, flags) {

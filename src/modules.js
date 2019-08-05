@@ -87,9 +87,13 @@ var LibraryManager = {
           libraries = libraries.concat([
             'library_idbfs.js',
             'library_proxyfs.js',
-            'library_sockfs.js',
             'library_workerfs.js',
           ]);
+        }
+        if (ENVIRONMENT_MAY_BE_TIZEN) {
+          libraries.push('library_tizen_sockfs.js');
+        } else {
+          libraries.push('library_sockfs.js');
         }
         if (ENVIRONMENT_MAY_BE_NODE) {
           libraries = libraries.concat([

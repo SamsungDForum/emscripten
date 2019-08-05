@@ -209,6 +209,8 @@ var SyscallsLibrary = {
     getSocketAddress: function(allowNull) {
       var addrp = SYSCALLS.get(), addrlen = SYSCALLS.get();
       if (allowNull && addrp === 0) return null;
+      if (!addrp) throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+      if (!addrlen) throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       var info = __read_sockaddr(addrp, addrlen);
       if (info.errno) throw new FS.ErrnoError(info.errno);
       info.addr = DNS.lookup_addr(info.addr) || info.addr;
@@ -522,33 +524,54 @@ var SyscallsLibrary = {
       }
       case 5: { // accept
         var sock = SYSCALLS.getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        if (addr && !addrlen) {
+          throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+        }
+        var newsock = sock.sock_ops.accept(sock, addr, addrlen);
+#else
         var newsock = sock.sock_ops.accept(sock);
         if (addr) {
           var res = __write_sockaddr(addr, newsock.family, DNS.lookup_name(newsock.daddr), newsock.dport);
 #if ASSERTIONS
           assert(!res.errno);
-#endif
+#endif  // ASSERTIONS
         }
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
         return newsock.stream.fd;
       }
       case 6: { // getsockname
         var sock = SYSCALLS.getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        if (!addr || !addrlen) {
+          throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+        }
+        sock.sock_ops.getsockname(sock, addr, addrlen);
+#else
         // TODO: sock.saddr should never be undefined, see TODO in websocket_sock_ops.getname
         var res = __write_sockaddr(addr, sock.family, DNS.lookup_name(sock.saddr || '0.0.0.0'), sock.sport);
 #if ASSERTIONS
         assert(!res.errno);
-#endif
+#endif  // ASSERTIONS
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
         return 0;
       }
       case 7: { // getpeername
         var sock = SYSCALLS.getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        if (!addr || !addrlen) {
+          throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+        }
+        sock.sock_ops.getpeername(sock, addr, addrlen);
+#else
         if (!sock.daddr) {
           return -ERRNO_CODES.ENOTCONN; // The socket is not connected.
         }
         var res = __write_sockaddr(addr, sock.family, DNS.lookup_name(sock.daddr), sock.dport);
 #if ASSERTIONS
         assert(!res.errno);
-#endif
+#endif  // ASSERTIONS
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
         return 0;
       }
       case 11: { // sendto
@@ -565,8 +588,8 @@ var SyscallsLibrary = {
         var sock = SYSCALLS.getSocketFromFD(), buf = SYSCALLS.get(), len = SYSCALLS.get(), flags = SYSCALLS.get(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
         var msg = sock.sock_ops.recvmsg(sock, len);
         if (!msg) return 0; // socket is closed
-        if (addr) {
-          var res = __write_sockaddr(addr, sock.family, DNS.lookup_name(msg.addr), msg.port);
+        if (msg.addr && addr && addrlen) {
+          var res = __write_sockaddr(addr, addrlen, sock.family, DNS.lookup_name(msg.addr), msg.port);
 #if ASSERTIONS
           assert(!res.errno);
 #endif
@@ -575,10 +598,20 @@ var SyscallsLibrary = {
         return msg.buffer.byteLength;
       }
       case 14: { // setsockopt
+#if ENVIRONMENT_MAY_BE_TIZEN
+        var sock = SYSCALLS.getSocketFromFD(), level = SYSCALLS.get(), optname = SYSCALLS.get(), optval = SYSCALLS.get(), optlen = SYSCALLS.get();
+        sock.sock_ops.setsockopt(sock, level, optname, optval, optlen);
+        return 0;
+#else
         return -ERRNO_CODES.ENOPROTOOPT; // The option is unknown at the level indicated.
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
       }
       case 15: { // getsockopt
         var sock = SYSCALLS.getSocketFromFD(), level = SYSCALLS.get(), optname = SYSCALLS.get(), optval = SYSCALLS.get(), optlen = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        sock.sock_ops.getsockopt(sock, level, optname, optval, optlen);
+        return 0;
+#else
         // Minimal getsockopt aimed at resolving https://github.com/emscripten-core/emscripten/issues/2211
         // so only supports SOL_SOCKET with SO_ERROR.
         if (level === {{{ cDefine('SOL_SOCKET') }}}) {
@@ -590,6 +623,7 @@ var SyscallsLibrary = {
           }
         }
         return -ERRNO_CODES.ENOPROTOOPT; // The option is unknown at the level indicated.
+#endif  // ENVIRONMENT_MAY_BE_TIZEN
       }
       case 16: { // sendmsg
         var sock = SYSCALLS.getSocketFromFD(), message = SYSCALLS.get(), flags = SYSCALLS.get();
@@ -645,8 +679,9 @@ var SyscallsLibrary = {
 
         // write the source address out
         var name = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_name, '*') }}};
-        if (name) {
-          var res = __write_sockaddr(name, sock.family, DNS.lookup_name(msg.addr), msg.port);
+        var namelen = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_namelen, 'i32') }}};
+        if (name && namelen) {
+          var res = __write_sockaddr(name, namelen, sock.family, DNS.lookup_name(msg.addr), msg.port);
 #if ASSERTIONS
           assert(!res.errno);
 #endif
@@ -766,16 +801,16 @@ var SyscallsLibrary = {
     // readfds are supported,
     // writefds checks socket open status
     // exceptfds not supported
-    // timeout is always 0 - fully async
+    // timeout is supported
+    const start_time = new Date();
     var nfds = SYSCALLS.get(), readfds = SYSCALLS.get(), writefds = SYSCALLS.get(), exceptfds = SYSCALLS.get(), timeout = SYSCALLS.get();
 
 #if ASSERTIONS
     assert(nfds <= 64, 'nfds must be less than or equal to 64');  // fd sets have 64 bits // TODO: this could be 1024 based on current musl headers
-    assert(!exceptfds, 'exceptfds not supported');
 #endif
 
     var total = 0;
-    
+
     var srcReadLow = (readfds ? {{{ makeGetValue('readfds', 0, 'i32') }}} : 0),
         srcReadHigh = (readfds ? {{{ makeGetValue('readfds', 4, 'i32') }}} : 0);
     var srcWriteLow = (writefds ? {{{ makeGetValue('writefds', 0, 'i32') }}} : 0),
@@ -797,36 +832,48 @@ var SyscallsLibrary = {
                   (writefds ? {{{ makeGetValue('writefds', 4, 'i32') }}} : 0) |
                   (exceptfds ? {{{ makeGetValue('exceptfds', 4, 'i32') }}} : 0);
 
+    timeout = ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_sec, 'i32') }}} * 1000)
+        + ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_usec, 'i32') }}} / 1000);
+
     var check = function(fd, low, high, val) {
       return (fd < 32 ? (low & val) : (high & val));
     };
 
-    for (var fd = 0; fd < nfds; fd++) {
-      var mask = 1 << (fd % 32);
-      if (!(check(fd, allLow, allHigh, mask))) {
-        continue;  // index isn't in the set
-      }
+    while (total === 0) {
+      const loop_start_time = new Date();
+      for (var fd = 0; fd < nfds; fd++) {
+        var mask = 1 << (fd % 32);
+        if (!(check(fd, allLow, allHigh, mask))) {
+          continue;  // index isn't in the set
+        }
 
-      var stream = FS.getStream(fd);
-      if (!stream) throw new FS.ErrnoError(ERRNO_CODES.EBADF);
+        var stream = FS.getStream(fd);
+        if (!stream) throw new FS.ErrnoError(ERRNO_CODES.EBADF);
 
-      var flags = SYSCALLS.DEFAULT_POLLMASK;
+        var flags = SYSCALLS.DEFAULT_POLLMASK;
 
-      if (stream.stream_ops.poll) {
-        flags = stream.stream_ops.poll(stream);
-      }
+        if (stream.stream_ops.poll) {
+          flags = stream.stream_ops.poll(stream);
+        }
 
-      if ((flags & {{{ cDefine('POLLIN') }}}) && check(fd, srcReadLow, srcReadHigh, mask)) {
-        fd < 32 ? (dstReadLow = dstReadLow | mask) : (dstReadHigh = dstReadHigh | mask);
-        total++;
+        if ((flags & {{{ cDefine('POLLIN') }}}) && check(fd, srcReadLow, srcReadHigh, mask)) {
+          fd < 32 ? (dstReadLow = dstReadLow | mask) : (dstReadHigh = dstReadHigh | mask);
+          total++;
+        }
+        if ((flags & {{{ cDefine('POLLOUT') }}}) && check(fd, srcWriteLow, srcWriteHigh, mask)) {
+          fd < 32 ? (dstWriteLow = dstWriteLow | mask) : (dstWriteHigh = dstWriteHigh | mask);
+          total++;
+        }
+        if ((flags & {{{ cDefine('POLLPRI') }}}) && check(fd, srcExceptLow, srcExceptHigh, mask)) {
+          fd < 32 ? (dstExceptLow = dstExceptLow | mask) : (dstExceptHigh = dstExceptHigh | mask);
+          total++;
+        }
       }
-      if ((flags & {{{ cDefine('POLLOUT') }}}) && check(fd, srcWriteLow, srcWriteHigh, mask)) {
-        fd < 32 ? (dstWriteLow = dstWriteLow | mask) : (dstWriteHigh = dstWriteHigh | mask);
-        total++;
-      }
-      if ((flags & {{{ cDefine('POLLPRI') }}}) && check(fd, srcExceptLow, srcExceptHigh, mask)) {
-        fd < 32 ? (dstExceptLow = dstExceptLow | mask) : (dstExceptHigh = dstExceptHigh | mask);
-        total++;
+      const loop_end_time = new Date();
+      const select_time = loop_end_time - start_time;
+      const loop_time_2 = (loop_end_time - loop_start_time) / 2;
+      if (select_time + loop_time_2 > timeout) {
+        break;
       }
     }
 
@@ -912,23 +959,33 @@ var SyscallsLibrary = {
     return -ERRNO_CODES.ENOMEM; // never succeed
   },
   __syscall168: function(which, varargs) { // poll
+    const start_time = new Date();
     var fds = SYSCALLS.get(), nfds = SYSCALLS.get(), timeout = SYSCALLS.get();
     var nonzero = 0;
-    for (var i = 0; i < nfds; i++) {
-      var pollfd = fds + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
-      var fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
-      var events = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.events, 'i16') }}};
-      var mask = {{{ cDefine('POLLNVAL') }}};
-      var stream = FS.getStream(fd);
-      if (stream) {
-        mask = SYSCALLS.DEFAULT_POLLMASK;
-        if (stream.stream_ops.poll) {
-          mask = stream.stream_ops.poll(stream);
+    while (nonzero === 0) {
+      const loop_start_time = new Date();
+      for (var i = 0; i < nfds; i++) {
+        var pollfd = fds + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
+        var fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
+        var events = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.events, 'i16') }}};
+        var mask = {{{ cDefine('POLLNVAL') }}};
+        var stream = FS.getStream(fd);
+        if (stream) {
+          mask = SYSCALLS.DEFAULT_POLLMASK;
+          if (stream.stream_ops.poll) {
+            mask = stream.stream_ops.poll(stream);
+          }
         }
+        mask &= events | {{{ cDefine('POLLERR') }}} | {{{ cDefine('POLLHUP') }}};
+        if (mask) nonzero++;
+        {{{ makeSetValue('pollfd', C_STRUCTS.pollfd.revents, 'mask', 'i16') }}};
       }
-      mask &= events | {{{ cDefine('POLLERR') }}} | {{{ cDefine('POLLHUP') }}};
-      if (mask) nonzero++;
-      {{{ makeSetValue('pollfd', C_STRUCTS.pollfd.revents, 'mask', 'i16') }}};
+      const loop_end_time = new Date();
+      const poll_time = loop_end_time - start_time;
+      const loop_time_2 = (loop_end_time - loop_start_time) / 2;
+      if (poll_time + loop_time_2 > timeout) {
+        break;
+      }
     }
     return nonzero;
   },

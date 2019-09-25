@@ -40,16 +40,12 @@ mergeInto(LibraryManager.library, {
       }
 
       try {
-        switch (type) {
-          case SOCKFS.SockType.SOCK_STREAM.value:
-            socket = new TcpSocketSync(familyName, option);
-            break;
-          case SOCKFS.SockType.SOCK_DGRAM.value:
-            socket = new UdpSocketSync(familyName, option);
-            break;
-          default:
-            SOCKFS.doLog('SOCKFS socket: not supported socket type');
-            throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
+        const sockType = SOCKFS.intToSockType(type);
+        if (sockType) {
+          socket = SocketsManager.create(familyName, sockType, option);
+        } else {
+          SOCKFS.doLog("SocketSync js_socket invalid type: " + type);
+          throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
         }
       } catch (err) {
         SOCKFS.doLog(`SOCKFS socket error creating socket - errno: [${err}]`);
@@ -61,7 +57,7 @@ mergeInto(LibraryManager.library, {
         type: type,
         protocol: protocol,
         select_helper: null,
-        sock_object: socket,
+        sock_fd: socket,
         sock_ops: SOCKFS.webengine_sock_ops
       };
 
@@ -92,6 +88,13 @@ mergeInto(LibraryManager.library, {
         return null;
       }
       return stream.node.sock;
+    },
+    hasSocket: function(fd) {
+      const stream = FS.getStream(fd);
+      if (!stream || !FS.isSocket(stream.node.mode)) {
+        return false;
+      }
+      return true;
     },
     // node and stream ops are backend agnostic
     stream_ops: {
@@ -143,13 +146,13 @@ mergeInto(LibraryManager.library, {
       // actual sock ops
       //
       poll: function(sock) {
-        if (!sock.sock_object) {
+        if (sock.sock_fd === -1) {
           return {{{ cDefine('POLLNVAL') }}};
         }
         if (!sock.select_helper) {
           sock.select_helper = new SelectSocket();
         }
-        const fd = sock.sock_object.socketFD;
+        const fd = sock.sock_fd;
         const readfds = [fd];
         const writefds = [fd];
         const exceptfds = [];
@@ -172,31 +175,33 @@ mergeInto(LibraryManager.library, {
       },
       close: function(sock) {
         try {
-          sock.sock_object.close();
-          sock.sock_object = null; // mark thas socket is closed
+          SocketsManager.close(sock.sock_fd);
+          sock.sock_fd = -1; // mark thas socket is closed
         } catch (err) {
           SOCKFS.doLog(`SOCKFS close error on socket close errno: [${err}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
       bind: function(sock, addr, port) {
         try {
           const netAddr = SOCKFS.createNetAddress(addr, port);
-          sock.sock_object.bind(netAddr);
+          SocketsManager.bind(sock.sock_fd, netAddr);
         } catch (err) {
-          if (sock.sock_object.errorCode) {
-            throw new FS.ErrnoError(sock.sock_object.errorCode);
+          const errorCode = SocketsManager.getErrorCode(sock.sock_fd);
+          if (errorCode) {
+            throw new FS.ErrnoError(errorCode);
           }
         }
       },
       connect: function(sock, addr, port) {
         try {
           const netAddr = SOCKFS.createNetAddress(addr, port);
-          sock.sock_object.connect(netAddr);
+          SocketsManager.connect(sock.sock_fd, netAddr);
         } catch (err) {
-          if (sock.sock_object.errorCode) {
-            throw new FS.ErrnoError(sock.sock_object.errorCode);
+          const errorCode = SocketsManager.getErrorCode(sock.sock_fd);
+          if (errorCode) {
+            throw new FS.ErrnoError(errorCode);
           }
         }
       },
@@ -206,19 +211,18 @@ mergeInto(LibraryManager.library, {
           return -1;
         }
         try {
-          sock.sock_object.listen(backlog);
+          SocketsManager.listen(sock.sock_fd, backlog);
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS listen error - errno: [${socketObj.socket.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
       accept: function(listensock, addr, addrlen) {
         try {
-          const newSockSync = listensock.sock_object.accept4(0);
+          const newSockSync = SocketsManager.accept4(listensock.sock_fd, 0);
 
           if (addr && addrlen) {
-            const peerAddr = SOCKFS.createBytesFromNetAddress(newSockSync.peerAddress);
+            const peerAddr = SOCKFS.createBytesFromNetAddress(SocketsManager.getPeerName(newSockSync));
             const len = HEAP32[addrlen >> 2];
             HEAP8.set(peerAddr.subarray(0, len), addr);
             HEAP32[addrlen >> 2] = peerAddr.length;
@@ -229,7 +233,7 @@ mergeInto(LibraryManager.library, {
             type: listensock.type,
             protocol: listensock.protocol,
             select_helper: null,
-            sock_object: newSockSync,
+            sock_fd: newSockSync,
             sock_ops: SOCKFS.webengine_sock_ops
           };
 
@@ -255,8 +259,8 @@ mergeInto(LibraryManager.library, {
           let st = FS.getStream(fd);
           return sock;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS accept error - errno: [${listensock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(listensock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS accept error - errno: [${SocketsManager.getErrorCode(listensock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(listensock.sock_fd));
         }
 
       },
@@ -274,18 +278,18 @@ mergeInto(LibraryManager.library, {
         let netAddr = null;
 
         if (sock.type == SOCKFS.SockType.SOCK_STREAM.value) {
-          return sock.sock_object.send(data, 0);
+          return SocketsManager.send(sock.sock_fd, data, 0);
         } else if (sock.type == SOCKFS.SockType.SOCK_DGRAM.value) {
           if (!addr || port === undefined || port === null) {
             try {
-              netAddr = sock.sock_object.getPeerName();
+              netAddr = SocketsManager.getPeerName(sock.sock_fd);
             } catch (err) {
               throw new FS.ErrnoError({{{ cDefine('EDESTADDRREQ') }}});
             }
           } else {
             netAddr = SOCKFS.createNetAddress(addr, port);
           }
-          return sock.sock_object.sendTo(data, 0, netAddr);
+          return SocketsManager.sendTo(sock.sock_fd, data, 0, netAddr);
         }
       },
       recvmsg: function(sock, length) {
@@ -294,17 +298,17 @@ mergeInto(LibraryManager.library, {
         let buffer;
         try {
           if (sock.type == SOCKFS.SockType.SOCK_STREAM.value) {
-            const retVal = sock.sock_object.recv(data, 0);
+            const retVal = SocketsManager.recv(sock.sock_fd, data, 0);
             buffer = new Uint8Array(data.buffer, 0, retVal);
           } else {
-            const retVal = sock.sock_object.recvFrom(data, 0);
+            const retVal = SocketsManager.recvFrom(sock.sock_fd, data, 0);
             buffer = new Uint8Array(data.buffer, 0, retVal.bytesRead);
             addr = SOCKFS.createAddrFromNetAddress(retVal.peerAddress);
             port = retVal.peerAddress.port;
           }
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS recvmsg error - errno: [${sock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS recvmsg error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
         return {
           buffer: buffer,
@@ -324,10 +328,10 @@ mergeInto(LibraryManager.library, {
         const value = SOCKFS.decodeValue(optname, _optval);
 
         try {
-          sock.sock_object.setSockOpt(args.level, args.option, value);
+          SocketsManager.setSockOpt(sock.sock_fd, args.level, args.option, value);
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS setsockopt error - errno: [${sock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS setsockopt error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
@@ -342,10 +346,10 @@ mergeInto(LibraryManager.library, {
         let val;
         const args = SOCKFS.getLevelAndOptionString(level, optname, true);
         try {
-          val = sock.sock_object.getSockOpt(args.level, args.option);
+          val = SocketsManager.getSockOpt(sock.sock_fd, args.level, args.option);
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockopt error - errno: [${sock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS getsockopt error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
         const encVal = SOCKFS.encodeValue(optname, val, _optlen);
         HEAPU8.set(encVal, optval);
@@ -354,7 +358,7 @@ mergeInto(LibraryManager.library, {
       },
       getsockname: function(sock, addr, addrlen) {
         try {
-          const sockAddress = sock.sock_object.getSockName();
+          const sockAddress = SocketsManager.getSockName(sock.sock_fd);
 
           const sockAddr = SOCKFS.createBytesFromNetAddress(sockAddress);
           const len = HEAP32[addrlen >> 2];
@@ -363,13 +367,13 @@ mergeInto(LibraryManager.library, {
 
           return 0;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${sock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
       },
       getpeername: function(sock, addr, addrlen) {
         try {
-          const peerAddress = sock.sock_object.getPeerName();
+          const peerAddress = SocketsManager.getPeerName(sock.sock_fd);
 
           const peerAddr = SOCKFS.createBytesFromNetAddress(peerAddress);
           const len = HEAP32[addrlen >> 2];
@@ -378,8 +382,8 @@ mergeInto(LibraryManager.library, {
 
           return 0;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${sock.sock_object.errorCode}]`);
-          throw new FS.ErrnoError(sock.sock_object.errorCode);
+          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
       },
     },
@@ -459,6 +463,9 @@ mergeInto(LibraryManager.library, {
     },
     intToFamily: function(family) {
       return SOCKFS.convertToEnum(SOCKFS.Family, family);
+    },
+    intToSockType: function(type) {
+      return SOCKFS.convertToEnum(SOCKFS.SockType, type);
     },
     createNetAddress__deps: ['_inet_pton6_raw'],
     createNetAddress: function(address, port) {

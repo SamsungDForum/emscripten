@@ -240,11 +240,7 @@ function JSify(data, functionsOnly) {
       if (isFunction) {
         // Emit the body of a JS library function.
         var proxyingMode = LibraryManager.library[ident + '__proxy'];
-        if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall3' ||
-            ident == '__syscall4' || ident == '__syscall5' || ident == '__syscall6' ||
-            ident == '__syscall102' || ident == '__syscall142' || ident == '__syscall168')) {
-          // TODO g.wolny fix the an issue with filesystem
-          // problem is reported at https://github.sec.samsung.net/HighPerformanceWeb/POSIX2Wasm/issues/79
+        if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall102')) {
           proxyingMode = false;
         }
         if (USE_PTHREADS && proxyingMode) {
@@ -254,8 +250,21 @@ function JSify(data, functionsOnly) {
           var sync = proxyingMode === 'sync';
           assert(typeof original === 'function');
           contentText = modifyFunction(snippet, function(name, args, body) {
+            let socketPresenceCheck = 'if (';
+            if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall3' ||
+                ident == '__syscall4' || ident == '__syscall6')) {  // read, write, close
+              socketPresenceCheck = 'const isSocket = SYSCALLS.isSocketOnCurrentThread(arguments);\n ' +
+                'if (!isSocket && ';
+            } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall142')) { // select
+              socketPresenceCheck = 'const isSocket = SYSCALLS.syscall142ContainsSockets(arguments);\n' +
+                'if (!isSocket && ';
+            } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall168')) { // poll
+              socketPresenceCheck = 'const isSocket = SYSCALLS.syscall168ContainsSockets(arguments);\n' +
+                'if (!isSocket && ';
+            }
             return 'function ' + name + '(' + args + ') {\n' +
-                   'if (ENVIRONMENT_IS_PTHREAD) return _emscripten_proxy_to_main_thread_js(' + proxiedFunctionTable.length + ', ' + (+sync) + (args ? ', ' : '') + args + ');\n' + body + '}\n';
+                socketPresenceCheck + 'ENVIRONMENT_IS_PTHREAD) \n' +
+                'return _emscripten_proxy_to_main_thread_js(' + proxiedFunctionTable.length + ', ' + (+sync) + (args ? ', ' : '') + args + ');\n' + body + '}\n';
           });
           proxiedFunctionTable.push(finalName);
         } else {

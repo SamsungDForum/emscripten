@@ -198,6 +198,61 @@ var SyscallsLibrary = {
 #endif
       return stream;
     },
+#if ENVIRONMENT_MAY_BE_TIZEN
+    isSocketOnCurrentThread: function(args){
+      let arg_ptr = args[1];
+      let fd = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+        return SOCKFS.hasSocket(fd);
+    },
+    syscall142ContainsSockets: function(args) {
+      let arg_ptr = args[1];
+      let nfds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+      let readfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
+      let writefds = {{{ makeGetValue('arg_ptr', '8', 'i32') }}};
+      let exceptfds = {{{ makeGetValue('arg_ptr', '12', 'i32') }}};
+
+      let allLow = (readfds ? {{{ makeGetValue('readfds', 0, 'i32') }}} : 0) |
+                   (writefds ? {{{ makeGetValue('writefds', 0, 'i32') }}} : 0) |
+                   (exceptfds ? {{{ makeGetValue('exceptfds', 0, 'i32') }}} : 0);
+      let allHigh = (readfds ? {{{ makeGetValue('readfds', 4, 'i32') }}} : 0) |
+                    (writefds ? {{{ makeGetValue('writefds', 4, 'i32') }}} : 0) |
+                    (exceptfds ? {{{ makeGetValue('exceptfds', 4, 'i32') }}} : 0);
+
+      let check = function(fd, low, high, val) {
+        return (fd < 32 ? (low & val) : (high & val));
+      };
+
+      let any_fd = -1;
+      for (var fd = 0; fd < nfds; fd++) {
+        const mask = 1 << (fd % 32);
+        if (check(fd, allLow, allHigh, mask)) {
+          any_fd = fd;
+          break;
+        }
+      }
+      if (any_fd < 0) {
+        return false;
+      }
+      return SOCKFS.hasSocket(any_fd);
+    },
+    syscall168ContainsSockets: function(args) {
+      let arg_ptr = args[1];
+      let fds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+      let nfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
+      let any_fd = -1;
+      for (var i = 0; i < nfds; i++) {
+        let pollfd = fds + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
+        any_fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
+        if (any_fd >= 0) {
+          break;
+        }
+      }
+      if (any_fd < 0) {
+        return false;
+      }
+      return SOCKFS.hasSocket(any_fd);
+    },
+#endif
     getSocketFromFD: function() {
       var socket = SOCKFS.getSocket(SYSCALLS.get());
       if (!socket) throw new FS.ErrnoError(ERRNO_CODES.EBADF);
@@ -239,7 +294,6 @@ var SyscallsLibrary = {
 #endif
     }
   },
-
   __syscall1: function(which, varargs) { // exit
     var status = SYSCALLS.get();
     exit(status);

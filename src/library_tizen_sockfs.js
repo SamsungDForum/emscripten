@@ -30,13 +30,13 @@ mergeInto(LibraryManager.library, {
       let option = 0;
       let socket = "socket object";
 
-      if (type & TcpSocketSync.SOCK_CLOEXEC) {
-        option |= TcpSocketSync.SOCK_CLOEXEC;
-        type &= ~TcpSocketSync.SOCK_CLOEXEC;
+      if (type & SocketsManager.SOCK_CLOEXEC) {
+        option |= SocketsManager.SOCK_CLOEXEC;
+        type &= ~SocketsManager.SOCK_CLOEXEC;
       }
-      if (type & TcpSocketSync.SOCK_NONBLOCK) {
-        option |= TcpSocketSync.SOCK_NONBLOCK;
-        type &= ~TcpSocketSync.SOCK_NONBLOCK;
+      if (type & SocketsManager.SOCK_NONBLOCK) {
+        option |= SocketsManager.SOCK_NONBLOCK;
+        type &= ~SocketsManager.SOCK_NONBLOCK;
       }
 
       try {
@@ -56,7 +56,6 @@ mergeInto(LibraryManager.library, {
         family: family,
         type: type,
         protocol: protocol,
-        select_helper: null,
         sock_fd: socket,
         sock_ops: SOCKFS.webengine_sock_ops
       };
@@ -149,15 +148,12 @@ mergeInto(LibraryManager.library, {
         if (sock.sock_fd === -1) {
           return {{{ cDefine('POLLNVAL') }}};
         }
-        if (!sock.select_helper) {
-          sock.select_helper = new SelectSocket();
-        }
         const fd = sock.sock_fd;
         const readfds = [fd];
         const writefds = [fd];
         const exceptfds = [];
 
-        const result = sock.select_helper.select(readfds, writefds, exceptfds, 0);
+        const result = SocketsManager.select(readfds, writefds, exceptfds, 0);
         let mask = 0;
         if (result.getReadFds().length > 0) {
           mask = {{{ cDefine('POLLRDNORM') }}} | {{{ cDefine('POLLIN') }}};
@@ -232,7 +228,6 @@ mergeInto(LibraryManager.library, {
             family: listensock.family,
             type: listensock.type,
             protocol: listensock.protocol,
-            select_helper: null,
             sock_fd: newSockSync,
             sock_ops: SOCKFS.webengine_sock_ops
           };

@@ -9,7 +9,10 @@ var SyscallsLibrary = {
                    '$FS', '$ERRNO_CODES', '$PATH',
 #endif
 #if SYSCALL_DEBUG
-                   '$ERRNO_MESSAGES'
+                   '$ERRNO_MESSAGES',
+#endif
+#if ENVIRONMENT_MAY_BE_TIZEN
+                   '$SOCKFS'
 #endif
   ],
   $SYSCALLS: {

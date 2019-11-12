@@ -1033,7 +1033,8 @@ var SyscallsLibrary = {
             mask = stream.stream_ops.poll(stream);
           }
         }
-        mask &= events | {{{ cDefine('POLLERR') }}} | {{{ cDefine('POLLHUP') }}};
+        mask &= events | {{{ cDefine('POLLERR') }}} | {{{ cDefine('POLLHUP') }}}
+                       | {{{ cDefine('POLLNVAL') }}};
         if (mask) nonzero++;
         {{{ makeSetValue('pollfd', C_STRUCTS.pollfd.revents, 'mask', 'i16') }}};
       }

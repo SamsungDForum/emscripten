@@ -269,11 +269,15 @@ mergeInto(LibraryManager.library, {
         }
 
         let data = new Uint8Array(buffer, offset, length);
-        //let data = buffer.slice(offset, offset + length);
         let netAddr = null;
 
         if (sock.type == SOCKFS.SockType.SOCK_STREAM.value) {
-          return SocketsManager.send(sock.sock_fd, data, 0);
+          try {
+            return SocketsManager.send(sock.sock_fd, data, 0);
+          } catch (err) {
+            SOCKFS.doLog(`SOCKFS sendmsg[${sock.sock_fd}] error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+            throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
+          }
         } else if (sock.type == SOCKFS.SockType.SOCK_DGRAM.value) {
           if (!addr || port === undefined || port === null) {
             try {
@@ -284,7 +288,12 @@ mergeInto(LibraryManager.library, {
           } else {
             netAddr = SOCKFS.createNetAddress(addr, port);
           }
-          return SocketsManager.sendTo(sock.sock_fd, data, 0, netAddr);
+          try {
+            return SocketsManager.sendTo(sock.sock_fd, data, 0, netAddr);
+          } catch (err) {
+            SOCKFS.doLog(`SOCKFS sendmsg[${sock.sock_fd}] error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+            throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
+          }
         }
       },
       recvmsg: function(sock, length) {

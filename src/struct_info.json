@@ -158,7 +158,9 @@
             "POLLPRI", 
             "POLLIN", 
             "POLLOUT", 
-            "POLLNVAL"
+            "POLLNVAL",
+            "POLLRDBAND",
+            "POLLWRBAND"
         ],
         "structs": {
             "pollfd": [

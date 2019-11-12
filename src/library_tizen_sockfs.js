@@ -148,23 +148,20 @@ mergeInto(LibraryManager.library, {
         if (sock.sock_fd === -1) {
           return {{{ cDefine('POLLNVAL') }}};
         }
-        const fd = sock.sock_fd;
-        const readfds = [fd];
-        const writefds = [fd];
-        const exceptfds = [];
+        const events = PollFlags.In
+                       | PollFlags.RdNorm
+                       | PollFlags.Pri
+                       | PollFlags.Out
+                       | PollFlags.WrNorm;
+        const poll_fd = new PollFd(sock.sock_fd, events);
 
-        const result = SocketsManager.select(readfds, writefds, exceptfds, 0);
-        let mask = 0;
-        if (result.getReadFds().length > 0) {
-          mask = {{{ cDefine('POLLRDNORM') }}} | {{{ cDefine('POLLIN') }}};
+        try {
+          const result = SocketsManager.poll([poll_fd], 0);
+        } catch (err) {
+          throw new FS.ErrnoError(SocketsManager.getErrorCode());
         }
-        if (result.getWriteFds().length > 0) {
-          mask |= {{{ cDefine('POLLOUT') }}} | {{{ cDefine('POLLWRNORM') }}};
-        }
-        if (result.getExceptFds().length > 0) {
-          mask |= {{{ cDefine('POLLPRI') }}};
-        }
-        return mask;
+
+        return SOCKFS.pollEventsConvert(poll_fd.revents);
       },
       ioctl: function(sock, request, arg) {
         console.log("SOCKFS ioctl() not implemented");
@@ -703,6 +700,27 @@ mergeInto(LibraryManager.library, {
           throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       }
       return addr;
+    },
+    pollEventsConvert: function(revents) {
+      const flags_map = new Map([
+        [ PollFlags.In,     {{{ cDefine('POLLIN')    }}}],
+        [ PollFlags.RdNorm, {{{ cDefine('POLLRDNORM')}}}],
+        [ PollFlags.RdBand, {{{ cDefine('POLLRDBAND')}}}],
+        [ PollFlags.Pri,    {{{ cDefine('POLLPRI')   }}}],
+        [ PollFlags.Out,    {{{ cDefine('POLLOUT')   }}}],
+        [ PollFlags.WrNorm, {{{ cDefine('POLLWRNORM')}}}],
+        [ PollFlags.WrBand, {{{ cDefine('POLLWRBAND')}}}],
+        [ PollFlags.Err,    {{{ cDefine('POLLERR')   }}}],
+        [ PollFlags.Hup,    {{{ cDefine('POLLHUP')   }}}],
+        [ PollFlags.Nval,   {{{ cDefine('POLLNVAL')  }}}],
+      ]);
+      let result = 0;
+      flags_map.forEach((value, key) => {
+        if ((revents & key) == key) {
+          result |= value;
+        }
+      });
+      return result;
     },
     doLog: function(...args) {
       if (SOCKFS.conf.loggingEnabled) {

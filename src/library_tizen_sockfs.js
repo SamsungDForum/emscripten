@@ -27,16 +27,18 @@ mergeInto(LibraryManager.library, {
         throw new FS.ErrnoError({{{ cDefine('EAFNOSUPPORT') }}});
       }
 
+      const SOCK_CLOEXEC = {{{ cDefine('SOCK_CLOEXEC') }}};
+      const SOCK_NONBLOCK = {{{ cDefine('SOCK_NONBLOCK') }}};
       let option = 0;
       let socket = "socket object";
 
-      if (type & SocketsManager.SOCK_CLOEXEC) {
-        option |= SocketsManager.SOCK_CLOEXEC;
-        type &= ~SocketsManager.SOCK_CLOEXEC;
+      if (type & SOCK_CLOEXEC) {
+        option |= SockFlags.SOCK_CLOEXEC;
+        type &= ~SOCK_CLOEXEC;
       }
-      if (type & SocketsManager.SOCK_NONBLOCK) {
-        option |= SocketsManager.SOCK_NONBLOCK;
-        type &= ~SocketsManager.SOCK_NONBLOCK;
+      if (type & SOCK_NONBLOCK) {
+        option |= SockFlags.SOCK_NONBLOCK;
+        type &= ~SOCK_NONBLOCK;
       }
 
       try {

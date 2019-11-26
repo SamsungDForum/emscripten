@@ -389,6 +389,21 @@ mergeInto(LibraryManager.library, {
           throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
         }
       },
+      shutdown: function(sock, how) {
+        const howFlag = SOCKFS.intToShutdownType(how);
+        if (howFlag === null) {
+          SOCKFS.doLog("SOCKFS shutdown: not supported shutdown type");
+          throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
+        }
+
+        try {
+          SocketsManager.shutdown(sock.sock_fd, howFlag);
+          return 0;
+        } catch (err) {
+          SOCKFS.doLog(`SOCKFS shutdown error - errno: [${SocketsManager.getErrorCode(sock.sock_fd)}]`);
+          throw new FS.ErrnoError(SocketsManager.getErrorCode(sock.sock_fd));
+        }
+      },
     },
     sizeof: {
       SOCKADDR_IN: 16,
@@ -460,15 +475,23 @@ mergeInto(LibraryManager.library, {
       SOCK_DGRAM: {name: 'sock_dgram', value: {{{ cDefine('SOCK_DGRAM') }}} },
     },
     Protocol: {
-      IPPROTO_IP: {name: 'ipproto_ip', value: 0},
-      IPPROTO_TCP: {name: 'ipproto_tcp', value: 6},
-      IPPROTO_UDP: {name: 'ipproto_udp', value: 17},
+      IPPROTO_IP: {name: 'ipproto_ip', value: {{{ cDefine('IPPROTO_IP') }}} },
+      IPPROTO_TCP: {name: 'ipproto_tcp', value: {{{ cDefine('IPPROTO_TCP') }}} },
+      IPPROTO_UDP: {name: 'ipproto_udp', value: {{{ cDefine('IPPROTO_UDP') }}} },
+    },
+    ShutdownType: {
+      SHUT_RD: {name: 'shut_rd', value: {{{ cDefine('SHUT_RD') }}} },
+      SHUT_WR: {name: 'shut_wr', value: {{{ cDefine('SHUT_WR') }}} },
+      SHUT_RDWR: {name: 'shut_rdwr', value: {{{ cDefine('SHUT_RDWR') }}} },
     },
     intToFamily: function(family) {
       return SOCKFS.convertToEnum(SOCKFS.Family, family);
     },
     intToSockType: function(type) {
       return SOCKFS.convertToEnum(SOCKFS.SockType, type);
+    },
+    intToShutdownType: function(type) {
+      return SOCKFS.convertToEnum(SOCKFS.ShutdownType, type);
     },
     createNetAddress__deps: ['_inet_pton6_raw'],
     createNetAddress: function(address, port) {

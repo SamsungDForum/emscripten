@@ -654,6 +654,13 @@ var SyscallsLibrary = {
         HEAPU8.set(msg.buffer, buf);
         return msg.buffer.byteLength;
       }
+#if ENVIRONMENT_MAY_BE_TIZEN
+      case 13: { // shutdown
+        var sock = SYSCALLS.getSocketFromFD(), how = SYSCALLS.get();
+        sock.sock_ops.shutdown(sock, how);
+        return 0;
+      }
+#endif
       case 14: { // setsockopt
 #if ENVIRONMENT_MAY_BE_TIZEN
         var sock = SYSCALLS.getSocketFromFD(), level = SYSCALLS.get(), optname = SYSCALLS.get(), optval = SYSCALLS.get(), optlen = SYSCALLS.get();

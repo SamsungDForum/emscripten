@@ -440,6 +440,7 @@
     {
         "file": "libc/netinet/in.h", 
         "defines": [
+            "IPPROTO_IP",
             "IPPROTO_UDP", 
             "IPPROTO_TCP", 
             "INADDR_LOOPBACK"
@@ -495,7 +496,10 @@
             "MSG_EOR",
             "MSG_WAITALL",
             "MSG_NOSIGNAL",
-            "MSG_TRUNC"
+            "MSG_TRUNC",
+            "SHUT_RD",
+            "SHUT_WR",
+            "SHUT_RDWR"
         ],
         "structs": {}
     }, 

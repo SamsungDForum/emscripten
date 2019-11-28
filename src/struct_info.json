@@ -494,7 +494,8 @@
             "MSG_PEEK",
             "MSG_EOR",
             "MSG_WAITALL",
-            "MSG_NOSIGNAL"
+            "MSG_NOSIGNAL",
+            "MSG_TRUNC"
         ],
         "structs": {}
     }, 

@@ -812,7 +812,20 @@
             "EBADR",
             "EISCONN",
             "ENOTBLK", 
-            "EOVERFLOW"
+            "EOVERFLOW",
+            "ERESTART",
+            "EUCLEAN",
+            "ENOTNAM",
+            "ENAVAIL",
+            "EISNAM",
+            "EREMOTEIO",
+            "EMEDIUMTYPE",
+            "ENOKEY",
+            "EKEYEXPIRED",
+            "EKEYREVOKED",
+            "EKEYREJECTED",
+            "ERFKILL",
+            "EHWPOISON"
         ],
         "structs": {}
     }, 

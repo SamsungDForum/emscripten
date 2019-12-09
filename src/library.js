@@ -3648,11 +3648,12 @@ LibraryManager.library = {
   _gethostbyaddr: function(addrPtr, len, type, hNamePtr, hostAliasPtrs,
     hAddrtypePtr, hLengthPtr, hostAddrPtrs, hostBufferPtr) {
 
-    const hr = new HostResolverSync();
+    const hr = new tizentvwasm.HostResolverSync();
     const addr = HEAPU8.subarray(addrPtr, addrPtr + len);
     let result;
     try {
-      result = hr.getHostByAddr(new NetAddress(__int_to_family(type), addr, 0));
+      result = hr.getHostByAddr(
+            new tizentvwasm.NetAddress(__int_to_family(type), addr, 0));
     } catch (e) {
       const err = hr.errorno > 0 ? hr.errorno : 1;
       return err;
@@ -3675,7 +3676,7 @@ LibraryManager.library = {
   _gethostbyname__deps: ['_hrstorage', '_store_host_ent'],
   _gethostbyname: function(name, hNamePtr, hostAliasPtrs, hAddrtypePtr,
       hLengthPtr, hostAddrPtrs, hostBufferPtr) {
-    const hr = new HostResolverSync();
+    const hr = new tizentvwasm.HostResolverSync();
 
     try {
       const result =
@@ -4286,7 +4287,7 @@ LibraryManager.library = {
   getaddrinfo__deps: ['_int_to_family', '_family_to_int', '_int_to_sock_type', '_sock_type_to_int', '_int_to_protocol', '_protocol_to_int', '_family', '_freeaddrinfo'],
   getaddrinfo__sig: 'iiiii',
   getaddrinfo: function(nodePtr, servicePtr, hintsPtr, resPtr) {
-    const hr = new HostResolverSync();
+    const hr = new tizentvwasm.HostResolverSync();
 
     const strlen = function(ptr) {
       let len = 0;
@@ -4328,8 +4329,8 @@ LibraryManager.library = {
     }
     protocol = __int_to_protocol(protocol);
 
-    const hint =
-        new AddressInfo(flags, family, socktype, protocol, null, null);
+    const hint = new tizentvwasm.AddressInfo(flags, family, socktype, protocol,
+                                             null, null);
 
     try {
       const addrList = hr.getAddrInfo(node, service, hint);

@@ -440,13 +440,33 @@
     {
         "file": "libc/netinet/in.h", 
         "defines": [
+            "INADDR_LOOPBACK",
+            "IP_ADD_MEMBERSHIP",
+            "IP_ADD_SOURCE_MEMBERSHIP",
+            "IP_BLOCK_SOURCE",
+            "IP_DROP_MEMBERSHIP",
+            "IP_DROP_SOURCE_MEMBERSHIP",
+            "IP_MULTICAST_LOOP",
+            "IP_MULTICAST_TTL",
+            "IP_UNBLOCK_SOURCE",
             "IPPROTO_IP",
             "IPPROTO_UDP", 
             "IPPROTO_TCP", 
-            "INADDR_LOOPBACK"
+            "IPPROTO_IPV6",
+            "IPV6_JOIN_GROUP",
+            "IPV6_MULTICAST_HOPS",
+            "IPV6_MULTICAST_LOOP",
+            "IPV6_LEAVE_GROUP"
         ],
         "structs": {}
     }, 
+    {
+        "file": "libc/netinet/tcp.h",
+        "defines": [
+            "TCP_NODELAY"
+        ],
+        "structs": {}
+    },
     {
         "file": "libc/math.h", 
         "defines": [
@@ -490,7 +510,20 @@
             "AF_UNSPEC",
             "AF_INET6",
             "SOL_SOCKET",
+            "SO_BROADCAST",
+            "SO_DONTROUTE",
+            "SO_DEBUG",
             "SO_ERROR",
+            "SO_KEEPALIVE",
+            "SO_LINGER",
+            "SO_OOBINLINE",
+            "SO_RCVBUF",
+            "SO_RCVLOWAT",
+            "SO_RCVTIMEO",
+            "SO_REUSEADDR",
+            "SO_SNDBUF",
+            "SO_SNDLOWAT",
+            "SO_SNDTIMEO",
             "MSG_OOB",
             "MSG_PEEK",
             "MSG_EOR",

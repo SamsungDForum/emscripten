@@ -298,11 +298,11 @@ mergeInto(LibraryManager.library, {
           return {{{ cDefine('POLLNVAL') }}};
         }
         const PollFlags = tizentvwasm.PollFlags;
-        const events = PollFlags.In
-                       | PollFlags.RdNorm
-                       | PollFlags.Pri
-                       | PollFlags.Out
-                       | PollFlags.WrNorm;
+        const events = PollFlags.POLLIN
+                       | PollFlags.POLLRDNORM
+                       | PollFlags.POLLPRI
+                       | PollFlags.POLLOUT
+                       | PollFlags.POLLWRNORM;
         const poll_fd = new tizentvwasm.PollFd(sock.sock_fd, events);
 
         try {
@@ -877,16 +877,16 @@ mergeInto(LibraryManager.library, {
     pollEventsConvert: function(revents) {
       const PollFlags = tizentvwasm.PollFlags;
       const flags_map = new Map([
-        [ PollFlags.In,     {{{ cDefine('POLLIN')    }}}],
-        [ PollFlags.RdNorm, {{{ cDefine('POLLRDNORM')}}}],
-        [ PollFlags.RdBand, {{{ cDefine('POLLRDBAND')}}}],
-        [ PollFlags.Pri,    {{{ cDefine('POLLPRI')   }}}],
-        [ PollFlags.Out,    {{{ cDefine('POLLOUT')   }}}],
-        [ PollFlags.WrNorm, {{{ cDefine('POLLWRNORM')}}}],
-        [ PollFlags.WrBand, {{{ cDefine('POLLWRBAND')}}}],
-        [ PollFlags.Err,    {{{ cDefine('POLLERR')   }}}],
-        [ PollFlags.Hup,    {{{ cDefine('POLLHUP')   }}}],
-        [ PollFlags.Nval,   {{{ cDefine('POLLNVAL')  }}}],
+        [ PollFlags.POLLIN,     {{{ cDefine('POLLIN')    }}}],
+        [ PollFlags.POLLRDNORM, {{{ cDefine('POLLRDNORM')}}}],
+        [ PollFlags.POLLRDBAND, {{{ cDefine('POLLRDBAND')}}}],
+        [ PollFlags.POLLPRI,    {{{ cDefine('POLLPRI')   }}}],
+        [ PollFlags.POLLOUT,    {{{ cDefine('POLLOUT')   }}}],
+        [ PollFlags.POLLWRNORM, {{{ cDefine('POLLWRNORM')}}}],
+        [ PollFlags.POLLWRBAND, {{{ cDefine('POLLWRBAND')}}}],
+        [ PollFlags.POLLERR,    {{{ cDefine('POLLERR')   }}}],
+        [ PollFlags.POLLHUP,    {{{ cDefine('POLLHUP')   }}}],
+        [ PollFlags.POLLNVAL,   {{{ cDefine('POLLNVAL')  }}}],
       ]);
       let result = 0;
       flags_map.forEach((value, key) => {

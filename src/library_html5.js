@@ -114,7 +114,9 @@ var LibraryJSEvents = {
     // Stores objects representing each currently registered JS event handler.
     eventHandlers: [],
 
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
     isInternetExplorer: function() { return navigator.userAgent.indexOf('MSIE') !== -1 || navigator.appVersion.indexOf('Trident/') > 0; },
+#endif
 
     // Removes all event handlers on the given DOM element of the given type. Pass in eventTypeString == undefined/null to remove all event handlers regardless of the type.
     removeAllHandlersOnTarget: function(target, eventTypeString) {
@@ -145,7 +147,7 @@ var LibraryJSEvents = {
         JSEvents.runDeferredCalls();
         // Out of event handler - restore nesting count.
         --JSEvents.inEventHandler;
-      }
+      };
       
       if (eventHandler.callbackfunc) {
         eventHandler.eventListenerFunc = jsEventHandler;
@@ -189,20 +191,6 @@ var LibraryJSEvents = {
     },
 #endif
 
-    getBoundingClientRectOrZeros: function(target) {
-      return target.getBoundingClientRect ? target.getBoundingClientRect() : { left: 0, top: 0 };
-    },
-
-    pageScrollPos: function() {
-      if (window.pageXOffset > 0 || window.pageYOffset > 0) {
-        return [window.pageXOffset, window.pageYOffset];
-      }
-      if (typeof document.documentElement.scrollLeft !== 'undefined' || typeof document.documentElement.scrollTop !== 'undefined') {
-        return [document.documentElement.scrollLeft, document.documentElement.scrollTop];
-      }
-      return [document.body.scrollLeft|0, document.body.scrollTop|0];
-    },
-
     getNodeNameForTarget: function(target) {
       if (!target) return '';
       if (target == window) return '#window';
@@ -210,13 +198,22 @@ var LibraryJSEvents = {
       return (target && target.nodeName) ? target.nodeName : '';
     },
 
-    tick: function() {
-      if (window['performance'] && window['performance']['now']) return window['performance']['now']();
-      else return Date.now();
-    },
-
     fullscreenEnabled: function() {
-      return document.fullscreenEnabled || document.mozFullScreenEnabled || document.webkitFullscreenEnabled || document.msFullscreenEnabled;
+      return document.fullscreenEnabled
+#if MIN_FIREFOX_VERSION <= 63
+      // Firefox 64 shipped unprefixed form of fullscreenEnabled (https://caniuse.com/#feat=mdn-api_document_fullscreenenabled)
+      || document.mozFullScreenEnabled
+#endif
+#if MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
+      // Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitFullscreenEnabled.
+      // TODO: If Safari at some point ships with unprefixed version, update the version check above.
+      || document.webkitFullscreenEnabled
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
+      // Last IE 11 shipped prefixed msFullscreenEnabled
+       || document.msFullscreenEnabled
+#endif
+       ;
     },
   },
 
@@ -227,8 +224,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.keyEvent) JSEvents.keyEvent = _malloc( {{{ C_STRUCTS.EmscriptenKeyboardEvent.__size__ }}} );
 
-    var keyEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var keyEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var keyEventData = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenKeyboardEvent.__size__ }}} ) : JSEvents.keyEvent; // This allocated block is passed as satellite data to the proxied function call, so the call frees up the data block when done.
@@ -258,7 +255,11 @@ var LibraryJSEvents = {
 
     var eventHandler = {
       target: __findEventTarget(target),
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
       allowsDeferredCalls: JSEvents.isInternetExplorer() ? false : true, // MSIE doesn't allow fullscreen and pointerlock requests from key handlers, others do.
+#else
+      allowsDeferredCalls: true,
+#endif
       eventTypeString: eventTypeString,
       callbackfunc: callbackfunc,
       handlerFunc: keyEventHandlerFunc,
@@ -289,12 +290,6 @@ var LibraryJSEvents = {
 #else
     var domElement = __specialEventTargets[target] || document.querySelector(__maybeCStringToJsString(target));
 #endif
-#if ASSERTIONS
-    // TODO: Remove this check in the future, or move it to some kind of debugging mode, because it may be perfectly fine behavior
-    // for one to query an event target to test if any DOM element with given CSS selector exists. However for a migration period
-    // from old lookup over to new, it is very useful to get diagnostics messages related to a lookup failing.
-    if (!domElement) err('No DOM element was found with CSS selector "' + __maybeCStringToJsString(target) + '"');
-#endif
     return domElement;
   },
 
@@ -303,15 +298,26 @@ var LibraryJSEvents = {
   _findCanvasEventTarget: function(target) {
     target = __maybeCStringToJsString(target);
 
-    // First look up if there exists an OffscreenCanvas with the given name.
-    var offscreenCanvas;
-    // TODO: Once Module['canvas'] is removed, clean up the following line:
-    if (target == '#canvas') offscreenCanvas = GL.offscreenCanvases['canvas'];
-    if (!offscreenCanvas) offscreenCanvas = GL.offscreenCanvases[target] || (target == 'canvas' && Object.keys(GL.offscreenCanvases)[0]); // First looks up by DOM ID ("#myCanvasElement"), second looks up by DOM element name (first found element of type <canvas>)
-    if (offscreenCanvas) return offscreenCanvas;
+    // When compiling with OffscreenCanvas support and looking up a canvas to target,
+    // we first look up if the target Canvas has been transferred to OffscreenCanvas use.
+    // These transfers are represented/tracked by GL.offscreenCanvases object, which contain
+    // the OffscreenCanvas element for each regular Canvas element that has been transferred.
 
+    // Note that each pthread/worker have their own set of GL.offscreenCanvases. That is,
+    // when an OffscreenCanvas is transferred from a pthread/main thread to another pthread,
+    // it will move in the GL.offscreenCanvases array between threads. Hence GL.offscreenCanvases
+    // represents the set of OffscreenCanvases owned by the current calling thread.
+
+    // First check out the list of OffscreenCanvases by CSS selector ID ('#myCanvasID')
+    return GL.offscreenCanvases[target.substr(1)] // Remove '#' prefix
+    // If not found, if one is querying by using DOM tag name selector 'canvas', grab the first
+    // OffscreenCanvas that we can find.
+     || (target == 'canvas' && Object.keys(GL.offscreenCanvases)[0])
+    // If that is not found either, query via the regular DOM selector.
 #if USE_PTHREADS
-    return (typeof document !== 'undefined') ? document.querySelector(target) : null;
+     || (typeof document !== 'undefined' && document.querySelector(target));
+#else
+     || document.querySelector(target);
 #endif
   },
 #else
@@ -381,13 +387,18 @@ var LibraryJSEvents = {
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
 
+  // Outline access to function .getBoundingClientRect() since it is a long string. Closure compiler does not outline access to it by itself, but it can inline access if
+  // there is only one caller to this function.
+  _getBoundingClientRect: function(e) {
+    return e.getBoundingClientRect();
+  },
+
   // Copies mouse event data from the given JS mouse event 'e' to the specified Emscripten mouse event structure in the HEAP.
   // eventStruct: the structure to populate.
   // e: The JS mouse event to read data from.
   // target: Specifies a target DOM element that will be used as the reference to populate targetX and targetY parameters.
-  _fillMouseEventData__deps: ['$JSEvents'],
+  _fillMouseEventData__deps: ['$JSEvents', '_getBoundingClientRect', '_specialEventTargets'],
   _fillMouseEventData: function(eventStruct, e, target) {
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.timestamp, 'JSEvents.tick()', 'double') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.screenX, 'e.screenX', 'i32') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.screenY, 'e.screenY', 'i32') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.clientX, 'e.clientX', 'i32') }}};
@@ -398,12 +409,36 @@ var LibraryJSEvents = {
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.metaKey, 'e.metaKey', 'i32') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.button, 'e.button', 'i16') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.buttons, 'e.buttons', 'i16') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.movementX, 'e["movementX"] || e["mozMovementX"] || e["webkitMovementX"] || (e.screenX-JSEvents.previousScreenX)', 'i32') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.movementY, 'e["movementY"] || e["mozMovementY"] || e["webkitMovementY"] || (e.screenY-JSEvents.previousScreenY)', 'i32') }}};
+    var movementX = e["movementX"]
+#if MIN_FIREFOX_VERSION <= 40
+      //     https://caniuse.com/#feat=mdn-api_mouseevent_movementx
+      || e["mozMovementX"]
+#endif
+#if MIN_CHROME_VERSION <= 36 // || MIN_ANDROID_BROWSER_VERSION <= 4.4.4
+      || e["webkitMovementX"]
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION <= 12 || MIN_CHROME_VERSION <= 21
+      || (e.screenX-JSEvents.previousScreenX)
+#endif
+      ;
+    var movementY = e["movementY"]
+#if MIN_FIREFOX_VERSION <= 40
+      || e["mozMovementY"]
+#endif
+#if MIN_CHROME_VERSION <= 36 // || MIN_ANDROID_BROWSER_VERSION <= 4.4.4
+      || e["webkitMovementY"]
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION <= 12 || MIN_CHROME_VERSION <= 21
+      || (e.screenY-JSEvents.previousScreenY)
+#endif
+      ;
+
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.movementX, 'movementX', 'i32') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.movementY, 'movementY', 'i32') }}};
 
 #if !DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR
     if (Module['canvas']) {
-      var rect = Module['canvas'].getBoundingClientRect();
+      var rect = __getBoundingClientRect(Module['canvas']);
       {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.canvasX, 'e.clientX - rect.left', 'i32') }}};
       {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.canvasY, 'e.clientY - rect.top', 'i32') }}};
     } else { // Canvas is not initialized, return 0.
@@ -411,14 +446,10 @@ var LibraryJSEvents = {
       {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.canvasY, '0', 'i32') }}};
     }
 #endif
-    if (target) {
-      var rect = JSEvents.getBoundingClientRectOrZeros(target);
-      {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetX, 'e.clientX - rect.left', 'i32') }}};
-      {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetY, 'e.clientY - rect.top', 'i32') }}};
-    } else { // No specific target passed, return 0.
-      {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetX, '0', 'i32') }}};
-      {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetY, '0', 'i32') }}};
-    }
+    var rect = __specialEventTargets.indexOf(target) < 0 ? __getBoundingClientRect(target) : {'left':0,'top':0};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetX, 'e.clientX - rect.left', 'i32') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenMouseEvent.targetY, 'e.clientY - rect.top', 'i32') }}};
+
     // wheel and mousewheel events contain wrong screenX/screenY on chrome/opera
       // https://github.com/emscripten-core/emscripten/pull/4997
     // https://bugs.chromium.org/p/chromium/issues/detail?id=699956
@@ -436,8 +467,8 @@ var LibraryJSEvents = {
     if (!JSEvents.mouseEvent) JSEvents.mouseEvent = _malloc( {{{ C_STRUCTS.EmscriptenMouseEvent.__size__ }}} );
     target = __findEventTarget(target);
 
-    var mouseEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var mouseEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       // TODO: Make this access thread safe, or this could update live while app is reading it.
       __fillMouseEventData(JSEvents.mouseEvent, e, target);
@@ -460,8 +491,10 @@ var LibraryJSEvents = {
       handlerFunc: mouseEventHandlerFunc,
       useCapture: useCapture
     };
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
     // In IE, mousedown events don't either allow deferred calls to be run!
     if (JSEvents.isInternetExplorer() && eventTypeString == 'mousedown') eventHandler.allowsDeferredCalls = false;
+#endif
     JSEvents.registerOrRemoveHandler(eventHandler);
   },
 
@@ -557,8 +590,8 @@ var LibraryJSEvents = {
     if (!JSEvents.wheelEvent) JSEvents.wheelEvent = _malloc( {{{ C_STRUCTS.EmscriptenWheelEvent.__size__ }}} );
 
     // The DOM Level 3 events spec event 'wheel'
-    var wheelHandlerFunc = function(event) {
-      var e = event || window.event;
+    var wheelHandlerFunc = function(ev) {
+      var e = ev || event;
 #if USE_PTHREADS
       var wheelEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenWheelEvent.__size__ }}} ) : JSEvents.wheelEvent; // This allocated block is passed as satellite data to the proxied function call, so the call frees up the data block when done.
 #else
@@ -575,12 +608,15 @@ var LibraryJSEvents = {
 #endif
       if ({{{ makeDynCall('iiii') }}}(callbackfunc, eventTypeId, wheelEvent, userData)) e.preventDefault();
     };
+#if MIN_IE_VERSION <= 8 || MIN_SAFARI_VERSION < 130000 // https://caniuse.com/#feat=mdn-api_wheelevent
     // The 'mousewheel' event as implemented in Safari 6.0.5
-    var mouseWheelHandlerFunc = function(event) {
-      var e = event || window.event;
+    var mouseWheelHandlerFunc = function(ev) {
+      var e = ev || event;
       __fillMouseEventData(JSEvents.wheelEvent, e, target);
       {{{ makeSetValue('JSEvents.wheelEvent', C_STRUCTS.EmscriptenWheelEvent.deltaX, 'e["wheelDeltaX"] || 0', 'double') }}};
-      {{{ makeSetValue('JSEvents.wheelEvent', C_STRUCTS.EmscriptenWheelEvent.deltaY, '-(e["wheelDeltaY"] ? e["wheelDeltaY"] : e["wheelDelta"]) /* 1. Invert to unify direction with the DOM Level 3 wheel event. 2. MSIE does not provide wheelDeltaY, so wheelDelta is used as a fallback. */', 'double') }}};
+      /* 1. Invert to unify direction with the DOM Level 3 wheel event. 2. MSIE does not provide wheelDeltaY, so wheelDelta is used as a fallback. */
+      var wheelDeltaY = -(e["wheelDeltaY"] || e["wheelDelta"])
+      {{{ makeSetValue('JSEvents.wheelEvent', C_STRUCTS.EmscriptenWheelEvent.deltaY, 'wheelDeltaY', 'double') }}};
       {{{ makeSetValue('JSEvents.wheelEvent', C_STRUCTS.EmscriptenWheelEvent.deltaZ, '0 /* Not available */', 'double') }}};
       {{{ makeSetValue('JSEvents.wheelEvent', C_STRUCTS.EmscriptenWheelEvent.deltaMode, '0 /* DOM_DELTA_PIXEL */', 'i32') }}};
       var shouldCancel = {{{ makeDynCall('iiii') }}}(callbackfunc, eventTypeId, JSEvents.wheelEvent, userData);
@@ -588,13 +624,18 @@ var LibraryJSEvents = {
         e.preventDefault();
       }
     };
+#endif
 
     var eventHandler = {
       target: target,
       allowsDeferredCalls: true,
       eventTypeString: eventTypeString,
       callbackfunc: callbackfunc,
+#if MIN_IE_VERSION <= 8 || MIN_SAFARI_VERSION < 130000 // https://caniuse.com/#feat=mdn-api_wheelevent
       handlerFunc: (eventTypeString == 'wheel') ? wheelHandlerFunc : mouseWheelHandlerFunc,
+#else
+      handlerFunc: wheelHandlerFunc,
+#endif
       useCapture: useCapture
     };
     JSEvents.registerOrRemoveHandler(eventHandler);
@@ -608,9 +649,11 @@ var LibraryJSEvents = {
     if (typeof target.onwheel !== 'undefined') {
       __registerWheelEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_WHEEL') }}}, "wheel", targetThread);
       return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
+#if MIN_IE_VERSION <= 8 || MIN_SAFARI_VERSION < 130000 // https://caniuse.com/#feat=mdn-api_wheelevent
     } else if (typeof target.onmousewheel !== 'undefined') {
       __registerWheelEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_WHEEL') }}}, "mousewheel", targetThread);
       return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
+#endif
     } else {
       return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     }
@@ -634,8 +677,8 @@ var LibraryJSEvents = {
 #else
 #endif
 
-    var uiEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var uiEventHandlerFunc = function(ev) {
+      var e = ev || event;
       if (e.target != target) {
         // Never take ui events such as scroll via a 'bubbled' route, but always from the direct element that
         // was targeted. Otherwise e.g. if app logs a message in response to a page scroll, the Emscripten log
@@ -643,22 +686,21 @@ var LibraryJSEvents = {
         // causing a new scroll, etc..
         return;
       }
-      var scrollPos = JSEvents.pageScrollPos();
-
 #if USE_PTHREADS
       var uiEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenUiEvent.__size__ }}} ) : JSEvents.uiEvent;
 #else
       var uiEvent = JSEvents.uiEvent;
 #endif
+      var b = document.body; // Take document.body to a variable, Closure compiler does not outline access to it on its own.
       {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.detail, 'e.detail', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.documentBodyClientWidth, 'document.body.clientWidth', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.documentBodyClientHeight, 'document.body.clientHeight', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowInnerWidth, 'window.innerWidth', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowInnerHeight, 'window.innerHeight', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowOuterWidth, 'window.outerWidth', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowOuterHeight, 'window.outerHeight', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.scrollTop, 'scrollPos[0]', 'i32') }}};
-      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.scrollLeft, 'scrollPos[1]', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.documentBodyClientWidth, 'b.clientWidth', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.documentBodyClientHeight, 'b.clientHeight', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowInnerWidth, 'innerWidth', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowInnerHeight, 'innerHeight', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowOuterWidth, 'outerWidth', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.windowOuterHeight, 'outerHeight', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.scrollTop, 'pageXOffset', 'i32') }}};
+      {{{ makeSetValue('uiEvent', C_STRUCTS.EmscriptenUiEvent.scrollLeft, 'pageYOffset', 'i32') }}};
 #if USE_PTHREADS
       if (targetThread) JSEvents.queueEventHandlerOnThread_iiii(targetThread, callbackfunc, eventTypeId, uiEvent, userData);
       else
@@ -700,8 +742,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.focusEvent) JSEvents.focusEvent = _malloc( {{{ C_STRUCTS.EmscriptenFocusEvent.__size__ }}} );
 
-    var focusEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var focusEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       var nodeName = JSEvents.getNodeNameForTarget(e.target);
       var id = e.target.id ? e.target.id : '';
@@ -766,7 +808,6 @@ var LibraryJSEvents = {
 
   _fillDeviceOrientationEventData__deps: ['$JSEvents'],
   _fillDeviceOrientationEventData: function(eventStruct, e, target) {
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceOrientationEvent.timestamp, 'JSEvents.tick()', 'double') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceOrientationEvent.alpha, 'e.alpha', 'double') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceOrientationEvent.beta, 'e.beta', 'double') }}};
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceOrientationEvent.gamma, 'e.gamma', 'double') }}};
@@ -780,8 +821,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.deviceOrientationEvent) JSEvents.deviceOrientationEvent = _malloc( {{{ C_STRUCTS.EmscriptenDeviceOrientationEvent.__size__ }}} );
 
-    var deviceOrientationEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var deviceOrientationEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       __fillDeviceOrientationEventData(JSEvents.deviceOrientationEvent, e, target); // TODO: Thread-safety with respect to emscripten_get_deviceorientation_status()
 
@@ -828,16 +869,25 @@ var LibraryJSEvents = {
 
   _fillDeviceMotionEventData__deps: ['$JSEvents'],
   _fillDeviceMotionEventData: function(eventStruct, e, target) {
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.timestamp, 'JSEvents.tick()', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationX, 'e.acceleration.x', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationY, 'e.acceleration.y', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationZ, 'e.acceleration.z', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityX, 'e.accelerationIncludingGravity.x', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityY, 'e.accelerationIncludingGravity.y', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityZ, 'e.accelerationIncludingGravity.z', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateAlpha, 'e.rotationRate.alpha', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateBeta, 'e.rotationRate.beta', 'double') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateGamma, 'e.rotationRate.gamma', 'double') }}};
+    var supportedFields = 0;
+    var a = e['acceleration'];
+    supportedFields |= a && {{{ cDefine('EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ACCELERATION') }}};
+    var ag = e['accelerationIncludingGravity'];
+    supportedFields |= ag && {{{ cDefine('EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ACCELERATION_INCLUDING_GRAVITY') }}};
+    var rr = e['rotationRate'];
+    supportedFields |= rr && {{{ cDefine('EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ROTATION_RATE') }}};
+    a = a || {};
+    ag = ag || {};
+    rr = rr || {};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationX, 'a["x"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationY, 'a["y"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationZ, 'a["z"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityX, 'ag["x"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityY, 'ag["y"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.accelerationIncludingGravityZ, 'ag["z"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateAlpha, 'rr["alpha"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateBeta, 'rr["beta"]', 'double') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceMotionEvent.rotationRateGamma, 'rr["gamma"]', 'double') }}};
   },
 
   _registerDeviceMotionEventCallback__deps: ['$JSEvents', '_fillDeviceMotionEventData', '_findEventTarget'],
@@ -847,8 +897,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.deviceMotionEvent) JSEvents.deviceMotionEvent = _malloc( {{{ C_STRUCTS.EmscriptenDeviceMotionEvent.__size__ }}} );
 
-    var deviceMotionEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var deviceMotionEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       __fillDeviceMotionEventData(JSEvents.deviceMotionEvent, e, target); // TODO: Thread-safety with respect to emscripten_get_devicemotion_status()
 
@@ -910,7 +960,7 @@ var LibraryJSEvents = {
     }
 
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenOrientationChangeEvent.orientationIndex, '1 << orientation', 'i32') }}};
-    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenOrientationChangeEvent.orientationAngle, 'window.orientation', 'i32') }}};
+    {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenOrientationChangeEvent.orientationAngle, 'orientation', 'i32') }}};
   },
 
   _registerOrientationChangeEventCallback__deps: ['$JSEvents', '_fillOrientationChangeEventData', '_findEventTarget'],
@@ -920,8 +970,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.orientationChangeEvent) JSEvents.orientationChangeEvent = _malloc( {{{ C_STRUCTS.EmscriptenOrientationChangeEvent.__size__ }}} );
 
-    var orientationChangeEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var orientationChangeEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var orientationChangeEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenDeviceMotionEvent.__size__ }}} ) : JSEvents.orientationChangeEvent;
@@ -966,7 +1016,7 @@ var LibraryJSEvents = {
   emscripten_get_orientation_status__sig: 'ii',
   emscripten_get_orientation_status__deps: ['_fillOrientationChangeEventData', '_screenOrientation'],
   emscripten_get_orientation_status: function(orientationChangeEvent) {
-    if (!__screenOrientation() && typeof window.orientation === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
+    if (!__screenOrientation() && typeof orientation === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     __fillOrientationChangeEventData(orientationChangeEvent);
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
@@ -1044,8 +1094,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.fullscreenChangeEvent) JSEvents.fullscreenChangeEvent = _malloc( {{{ C_STRUCTS.EmscriptenFullscreenChangeEvent.__size__ }}} );
 
-    var fullscreenChangeEventhandlerFunc = function(event) {
-      var e = event || window.event;
+    var fullscreenChangeEventhandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var fullscreenChangeEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenFullscreenChangeEvent.__size__ }}} ) : JSEvents.fullscreenChangeEvent;
@@ -1077,7 +1127,7 @@ var LibraryJSEvents = {
   emscripten_set_fullscreenchange_callback_on_thread__sig: 'iiiiii',
   emscripten_set_fullscreenchange_callback_on_thread__deps: ['$JSEvents', '_registerFullscreenChangeEventCallback', '_findEventTarget', '_specialEventTargets'],
   emscripten_set_fullscreenchange_callback_on_thread: function(target, userData, useCapture, callbackfunc, targetThread) {
-    if (typeof JSEvents.fullscreenEnabled() === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
+    if (!JSEvents.fullscreenEnabled()) return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
 #if DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR
     target = __findEventTarget(target);
 #else
@@ -1085,9 +1135,20 @@ var LibraryJSEvents = {
 #endif
     if (!target) return {{{ cDefine('EMSCRIPTEN_RESULT_UNKNOWN_TARGET') }}};
     __registerFullscreenChangeEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_FULLSCREENCHANGE') }}}, "fullscreenchange", targetThread);
+
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=mdn-api_element_fullscreenchange_event
     __registerFullscreenChangeEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_FULLSCREENCHANGE') }}}, "mozfullscreenchange", targetThread);
+#endif
+
+#if MIN_CHROME_VERSION < 71 || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
+    // Unprefixed Fullscreen API shipped in Chromium 71 (https://bugs.chromium.org/p/chromium/issues/detail?id=383813)
+    // As of Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitfullscreenchange. TODO: revisit this check once Safari ships unprefixed version.
     __registerFullscreenChangeEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_FULLSCREENCHANGE') }}}, "webkitfullscreenchange", targetThread);
-    __registerFullscreenChangeEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_FULLSCREENCHANGE') }}}, "msfullscreenchange", targetThread);
+#endif
+
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_document_fullscreenchange_event
+    __registerFullscreenChangeEventCallback(target, userData, useCapture, callbackfunc, {{{ cDefine('EMSCRIPTEN_EVENT_FULLSCREENCHANGE') }}}, "MSFullscreenChange", targetThread);
+#endif
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
 
@@ -1095,7 +1156,7 @@ var LibraryJSEvents = {
   emscripten_get_fullscreen_status__sig: 'ii',
   emscripten_get_fullscreen_status__deps: ['$JSEvents', '_fillFullscreenChangeEventData'],
   emscripten_get_fullscreen_status: function(fullscreenStatus) {
-    if (typeof JSEvents.fullscreenEnabled() === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
+    if (!JSEvents.fullscreenEnabled()) return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     __fillFullscreenChangeEventData(fullscreenStatus);
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
@@ -1109,20 +1170,22 @@ var LibraryJSEvents = {
 
     if (target.requestFullscreen) {
       target.requestFullscreen();
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=fullscreen
     } else if (target.msRequestFullscreen) {
       target.msRequestFullscreen();
+#endif
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=fullscreen
     } else if (target.mozRequestFullScreen) {
       target.mozRequestFullScreen();
     } else if (target.mozRequestFullscreen) {
       target.mozRequestFullscreen();
+#endif
+#if MIN_CHROME_VERSION <= 70 || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
     } else if (target.webkitRequestFullscreen) {
       target.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+#endif
     } else {
-      if (typeof JSEvents.fullscreenEnabled() === 'undefined') {
-        return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
-      } else {
-        return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}};
-      }
+      return JSEvents.fullscreenEnabled() ? {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}} : {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     }
 
     if (strategy.canvasResizedCallback) {
@@ -1136,14 +1199,19 @@ var LibraryJSEvents = {
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
 
-  JSEvents_resizeCanvasForFullscreen__deps: ['_registerRestoreOldStyle', '_get_canvas_element_size', '_setLetterbox', '_set_canvas_element_size'],
+  JSEvents_resizeCanvasForFullscreen__deps: ['_registerRestoreOldStyle', '_get_canvas_element_size', '_setLetterbox', '_set_canvas_element_size', '_getBoundingClientRect'],
   JSEvents_resizeCanvasForFullscreen: function(target, strategy) {
     var restoreOldStyle = __registerRestoreOldStyle(target);
-    var cssWidth = strategy.softFullscreen ? window.innerWidth : screen.width;
-    var cssHeight = strategy.softFullscreen ? window.innerHeight : screen.height;
-    var rect = target.getBoundingClientRect();
+    var cssWidth = strategy.softFullscreen ? innerWidth : screen.width;
+    var cssHeight = strategy.softFullscreen ? innerHeight : screen.height;
+    var rect = __getBoundingClientRect(target);
+#if LEGACY_VM_SUPPORT
     var windowedCssWidth = rect.right - rect.left;
     var windowedCssHeight = rect.bottom - rect.top;
+#else
+    var windowedCssWidth = rect.width; // .getBoundingClientRect(element).width & .height do not work on IE 8 and older, IE 9+ is required
+    var windowedCssHeight = rect.height;
+#endif
     var canvasSize = __get_canvas_element_size(target);
     var windowedRttWidth = canvasSize[0];
     var windowedRttHeight = canvasSize[1];
@@ -1184,7 +1252,7 @@ var LibraryJSEvents = {
       target.style.imageRendering = 'pixelated';
     }
 
-    var dpiScale = (strategy.canvasResolutionScaleMode == {{{ cDefine('EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF') }}}) ? window.devicePixelRatio : 1;
+    var dpiScale = (strategy.canvasResolutionScaleMode == {{{ cDefine('EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF') }}}) ? devicePixelRatio : 1;
     if (strategy.canvasResolutionScaleMode != {{{ cDefine('EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_NONE') }}}) {
       var newWidth = (cssWidth * dpiScale)|0;
       var newHeight = (cssHeight * dpiScale)|0;
@@ -1218,12 +1286,33 @@ var LibraryJSEvents = {
     var oldImageRendering = canvas.style.imageRendering;
 
     function restoreOldStyle() {
-      var fullscreenElement = document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+      var fullscreenElement = document.fullscreenElement
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=mdn-api_documentorshadowroot_fullscreenelement
+        || document.mozFullScreenElement
+#endif
+#if MIN_EDGE_VERSION != TARGET_NOT_SUPPORTED || MIN_CHROME_VERSION != TARGET_NOT_SUPPORTED || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_documentorshadowroot_fullscreenelement
+        || document.webkitFullscreenElement
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION < 76
+        || document.msFullscreenElement
+#endif
+        ;
       if (!fullscreenElement) {
         document.removeEventListener('fullscreenchange', restoreOldStyle);
+
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=mdn-api_element_fullscreenchange_event
         document.removeEventListener('mozfullscreenchange', restoreOldStyle);
+#endif
+
+#if MIN_CHROME_VERSION < 71 || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
+        // Unprefixed Fullscreen API shipped in Chromium 71 (https://bugs.chromium.org/p/chromium/issues/detail?id=383813)
+        // As of Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitfullscreenchange. TODO: revisit this check once Safari ships unprefixed version.
         document.removeEventListener('webkitfullscreenchange', restoreOldStyle);
+#endif
+
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_document_fullscreenchange_event
         document.removeEventListener('MSFullscreenChange', restoreOldStyle);
+#endif
 
         __set_canvas_element_size(canvas, oldWidth, oldHeight);
 
@@ -1259,9 +1348,17 @@ var LibraryJSEvents = {
       }
     }
     document.addEventListener('fullscreenchange', restoreOldStyle);
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=mdn-api_element_fullscreenchange_event
     document.addEventListener('mozfullscreenchange', restoreOldStyle);
+#endif
+#if MIN_CHROME_VERSION < 71 || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
+    // Unprefixed Fullscreen API shipped in Chromium 71 (https://bugs.chromium.org/p/chromium/issues/detail?id=383813)
+    // As of Safari 13.0.3 on macOS Catalina 10.15.1 still ships with prefixed webkitfullscreenchange. TODO: revisit this check once Safari ships unprefixed version.
     document.addEventListener('webkitfullscreenchange', restoreOldStyle);
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_document_fullscreenchange_event
     document.addEventListener('MSFullscreenChange', restoreOldStyle);
+#endif
     return restoreOldStyle;
   },
 
@@ -1296,6 +1393,7 @@ var LibraryJSEvents = {
   // Add letterboxes to a fullscreen element in a cross-browser way.
   _setLetterbox__deps: ['$JSEvents'],
   _setLetterbox: function(element, topBottom, leftRight) {
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
     if (JSEvents.isInternetExplorer()) {
       // Cannot use padding on IE11, because IE11 computes padding in addition to the size, unlike
       // other browsers, which treat padding to be part of the size.
@@ -1306,10 +1404,13 @@ var LibraryJSEvents = {
       element.style.marginLeft = element.style.marginRight = leftRight + 'px';
       element.style.marginTop = element.style.marginBottom = topBottom + 'px';
     } else {
+#endif
       // Cannot use margin to specify letterboxes in FF or Chrome, since those ignore margins in fullscreen mode.
       element.style.paddingLeft = element.style.paddingRight = leftRight + 'px';
       element.style.paddingTop = element.style.paddingBottom = topBottom + 'px';
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED
     }
+#endif
   },
 
   _currentFullscreenStrategy: {},
@@ -1317,12 +1418,13 @@ var LibraryJSEvents = {
 
   _softFullscreenResizeWebGLRenderTarget__deps: ['$JSEvents', '_setLetterbox', '_currentFullscreenStrategy', '_get_canvas_element_size', '_set_canvas_element_size'],
   _softFullscreenResizeWebGLRenderTarget: function() {
+    var dpr = devicePixelRatio;
     var inHiDPIFullscreenMode = __currentFullscreenStrategy.canvasResolutionScaleMode == {{{ cDefine('EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF') }}};
     var inAspectRatioFixedFullscreenMode = __currentFullscreenStrategy.scaleMode == {{{ cDefine('EMSCRIPTEN_FULLSCREEN_SCALE_ASPECT') }}};
     var inPixelPerfectFullscreenMode = __currentFullscreenStrategy.canvasResolutionScaleMode != {{{ cDefine('EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_NONE') }}};
     var inCenteredWithoutScalingFullscreenMode = __currentFullscreenStrategy.scaleMode == {{{ cDefine('EMSCRIPTEN_FULLSCREEN_SCALE_CENTER') }}};
-    var screenWidth = inHiDPIFullscreenMode ? Math.round(window.innerWidth*window.devicePixelRatio) : window.innerWidth;
-    var screenHeight = inHiDPIFullscreenMode ? Math.round(window.innerHeight*window.devicePixelRatio) : window.innerHeight;
+    var screenWidth = inHiDPIFullscreenMode ? Math.round(innerWidth*dpr) : innerWidth;
+    var screenHeight = inHiDPIFullscreenMode ? Math.round(innerHeight*dpr) : innerHeight;
     var w = screenWidth;
     var h = screenHeight;
     var canvas = __currentFullscreenStrategy.target;
@@ -1344,9 +1446,9 @@ var LibraryJSEvents = {
 
     // Back to CSS pixels.
     if (inHiDPIFullscreenMode) {
-      topMargin /= window.devicePixelRatio;
-      w /= window.devicePixelRatio;
-      h /= window.devicePixelRatio;
+      topMargin /= dpr;
+      w /= dpr;
+      h /= dpr;
       // Round to nearest 4 digits of precision.
       w = Math.round(w*1e4)/1e4;
       h = Math.round(h*1e4)/1e4;
@@ -1354,13 +1456,13 @@ var LibraryJSEvents = {
     }
 
     if (inCenteredWithoutScalingFullscreenMode) {
-      var t = (window.innerHeight - parseInt(canvas.style.height)) / 2;
-      var b = (window.innerWidth - parseInt(canvas.style.width)) / 2;
+      var t = (innerHeight - parseInt(canvas.style.height)) / 2;
+      var b = (innerWidth - parseInt(canvas.style.width)) / 2;
       __setLetterbox(canvas, t, b);
     } else {
       canvas.style.width = w + 'px';
       canvas.style.height = h + 'px';
-      var b = (window.innerWidth - w) / 2;
+      var b = (innerWidth - w) / 2;
       __setLetterbox(canvas, topMargin, b);
     }
 
@@ -1376,15 +1478,25 @@ var LibraryJSEvents = {
   // https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Using_full_screen_mode  
   _emscripten_do_request_fullscreen__deps: ['$JSEvents', '_setLetterbox', 'emscripten_set_canvas_element_size', 'emscripten_get_canvas_element_size', '_get_canvas_element_size', '_set_canvas_element_size', 'JSEvents_requestFullscreen', '_findEventTarget'],
   _emscripten_do_request_fullscreen: function(target, strategy) {
-    if (typeof JSEvents.fullscreenEnabled() === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
-    if (!JSEvents.fullscreenEnabled()) return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}};
+    if (!JSEvents.fullscreenEnabled()) return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
 #if !DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR
     if (!target) target = '#canvas';
 #endif
     target = __findEventTarget(target);
     if (!target) return {{{ cDefine('EMSCRIPTEN_RESULT_UNKNOWN_TARGET') }}};
 
-    if (!target.requestFullscreen && !target.msRequestFullscreen && !target.mozRequestFullScreen && !target.mozRequestFullscreen && !target.webkitRequestFullscreen) {
+    if (!target.requestFullscreen
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=fullscreen
+      && !target.msRequestFullscreen
+#endif
+#if MIN_FIREFOX_VERSION <= 63 // https://caniuse.com/#feat=fullscreen
+      && !target.mozRequestFullScreen
+      && !target.mozRequestFullscreen
+#endif
+#if MIN_CHROME_VERSION <= 70 || MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED
+      && !target.webkitRequestFullscreen
+#endif
+      ) {
       return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}};
     }
 
@@ -1470,7 +1582,7 @@ var LibraryJSEvents = {
     function restoreWindowedState() {
       restoreOldStyle();
       __restoreHiddenElements(hiddenElements);
-      window.removeEventListener('resize', __softFullscreenResizeWebGLRenderTarget);
+      removeEventListener('resize', __softFullscreenResizeWebGLRenderTarget);
       if (strategy.canvasResizedCallback) {
 #if USE_PTHREADS
         if (strategy.canvasResizedCallbackTargetThread) JSEvents.queueEventHandlerOnThread_iiii(strategy.canvasResizedCallbackTargetThread, strategy.canvasResizedCallback, {{{ cDefine('EMSCRIPTEN_EVENT_CANVASRESIZED') }}}, 0, strategy.canvasResizedCallbackUserData);
@@ -1482,7 +1594,7 @@ var LibraryJSEvents = {
     }
     __restoreOldWindowedStyle = restoreWindowedState;
     __currentFullscreenStrategy = strategy;
-    window.addEventListener('resize', __softFullscreenResizeWebGLRenderTarget);
+    addEventListener('resize', __softFullscreenResizeWebGLRenderTarget);
 
     // Inform the caller that the canvas size has changed.
     if (strategy.canvasResizedCallback) {
@@ -1510,30 +1622,27 @@ var LibraryJSEvents = {
   emscripten_exit_fullscreen__proxy: 'sync',
   emscripten_exit_fullscreen__sig: 'i',
   emscripten_exit_fullscreen: function() {
-    if (typeof JSEvents.fullscreenEnabled() === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
+    if (!JSEvents.fullscreenEnabled()) return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     // Make sure no queued up calls will fire after this.
     JSEvents.removeDeferredCalls(_JSEvents_requestFullscreen);
 
     var d = __specialEventTargets[{{{ cDefine('EMSCRIPTEN_EVENT_TARGET_DOCUMENT') }}}];
     if (d.exitFullscreen) {
       d.fullscreenElement && d.exitFullscreen();
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_document_exitfullscreen
     } else if (d.msExitFullscreen) {
       d.msFullscreenElement && d.msExitFullscreen();
+#endif
+#if MIN_FIREFOX_VERSION < 64 // https://caniuse.com/#feat=mdn-api_document_exitfullscreen
     } else if (d.mozCancelFullScreen) {
       d.mozFullScreenElement && d.mozCancelFullScreen();
+#endif
+#if MIN_SAFARI_VERSION != TARGET_NOT_SUPPORTED // https://caniuse.com/#feat=mdn-api_document_exitfullscreen
     } else if (d.webkitExitFullscreen) {
       d.webkitFullscreenElement && d.webkitExitFullscreen();
+#endif
     } else {
       return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
-    }
-
-    if (__currentFullscreenStrategy.canvasResizedCallback) {
-#if USE_PTHREADS
-        if (__currentFullscreenStrategy.canvasResizedCallbackTargetThread) JSEvents.queueEventHandlerOnThread_iiii(__currentFullscreenStrategy.canvasResizedCallbackTargetThread, __currentFullscreenStrategy.canvasResizedCallback, {{{ cDefine('EMSCRIPTEN_EVENT_CANVASRESIZED') }}}, 0, __currentFullscreenStrategy.canvasResizedCallbackUserData);
-        else
-#endif
-      {{{ makeDynCall('iiii') }}}(__currentFullscreenStrategy.canvasResizedCallback, {{{ cDefine('EMSCRIPTEN_EVENT_CANVASRESIZED') }}}, 0, __currentFullscreenStrategy.canvasResizedCallbackUserData);
-      __currentFullscreenStrategy = 0;
     }
 
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
@@ -1557,8 +1666,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.pointerlockChangeEvent) JSEvents.pointerlockChangeEvent = _malloc( {{{ C_STRUCTS.EmscriptenPointerlockChangeEvent.__size__ }}} );
 
-    var pointerlockChangeEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var pointerlockChangeEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var pointerlockChangeEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenPointerlockChangeEvent.__size__ }}} ) : JSEvents.pointerlockChangeEvent;
@@ -1609,8 +1718,8 @@ var LibraryJSEvents = {
 
   _registerPointerlockErrorEventCallback__deps: ['$JSEvents', '_findEventTarget', '_specialEventTargets'],
   _registerPointerlockErrorEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString) {
-    var pointerlockErrorEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var pointerlockErrorEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       if (targetThread) JSEvents.queueEventHandlerOnThread_iiii(targetThread, callbackfunc, eventTypeId, 0, userData);
@@ -1667,16 +1776,32 @@ var LibraryJSEvents = {
   _requestPointerLock: function(target) {
     if (target.requestPointerLock) {
       target.requestPointerLock();
+#if MIN_FIREFOX_VERSION <= 40 // https://caniuse.com/#feat=pointerlock
     } else if (target.mozRequestPointerLock) {
       target.mozRequestPointerLock();
+#endif
+#if MIN_CHROME_VERSION <= 36 // https://caniuse.com/#feat=pointerlock
     } else if (target.webkitRequestPointerLock) {
       target.webkitRequestPointerLock();
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION < 76
     } else if (target.msRequestPointerLock) {
       target.msRequestPointerLock();
+#endif
     } else {
       // document.body is known to accept pointer lock, so use that to differentiate if the user passed a bad element,
       // or if the whole browser just doesn't support the feature.
-      if (document.body.requestPointerLock || document.body.mozRequestPointerLock || document.body.webkitRequestPointerLock || document.body.msRequestPointerLock) {
+      if (document.body.requestPointerLock
+#if MIN_FIREFOX_VERSION <= 40 // https://caniuse.com/#feat=pointerlock
+        || document.body.mozRequestPointerLock
+#endif
+#if MIN_CHROME_VERSION <= 36 // https://caniuse.com/#feat=pointerlock
+        || document.body.webkitRequestPointerLock
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION < 76
+        || document.body.msRequestPointerLock
+#endif
+        ) {
         return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}};
       } else {
         return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
@@ -1694,7 +1819,17 @@ var LibraryJSEvents = {
 #endif
     target = __findEventTarget(target);
     if (!target) return {{{ cDefine('EMSCRIPTEN_RESULT_UNKNOWN_TARGET') }}};
-    if (!target.requestPointerLock && !target.mozRequestPointerLock && !target.webkitRequestPointerLock && !target.msRequestPointerLock) {
+    if (!target.requestPointerLock
+#if MIN_FIREFOX_VERSION <= 40 // https://caniuse.com/#feat=pointerlock
+      && !target.mozRequestPointerLock
+#endif
+#if MIN_CHROME_VERSION <= 36 // https://caniuse.com/#feat=pointerlock
+      && !target.webkitRequestPointerLock
+#endif
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION < 76
+      && !target.msRequestPointerLock
+#endif
+      ) {
       return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     }
 
@@ -1722,12 +1857,18 @@ var LibraryJSEvents = {
 
     if (document.exitPointerLock) {
       document.exitPointerLock();
+#if MIN_IE_VERSION != TARGET_NOT_SUPPORTED || MIN_EDGE_VERSION < 76
     } else if (document.msExitPointerLock) {
       document.msExitPointerLock();
+#endif
+#if MIN_FIREFOX_VERSION <= 40 // https://caniuse.com/#feat=pointerlock
     } else if (document.mozExitPointerLock) {
       document.mozExitPointerLock();
+#endif
+#if MIN_CHROME_VERSION <= 36 // https://caniuse.com/#feat=pointerlock
     } else if (document.webkitExitPointerLock) {
       document.webkitExitPointerLock();
+#endif
     } else {
       return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     }
@@ -1771,8 +1912,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.visibilityChangeEvent) JSEvents.visibilityChangeEvent = _malloc( {{{ C_STRUCTS.EmscriptenVisibilityChangeEvent.__size__ }}} );
 
-    var visibilityChangeEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var visibilityChangeEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var visibilityChangeEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenVisibilityChangeEvent.__size__ }}} ) : JSEvents.visibilityChangeEvent;
@@ -1824,7 +1965,7 @@ var LibraryJSEvents = {
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
 
-  _registerTouchEventCallback__deps: ['$JSEvents', '_findEventTarget'],
+  _registerTouchEventCallback__deps: ['$JSEvents', '_findEventTarget', '_getBoundingClientRect'],
   _registerTouchEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -1833,12 +1974,13 @@ var LibraryJSEvents = {
 
     target = __findEventTarget(target);
 
-    var touchEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var touchEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       var touches = {};
       for(var i = 0; i < e.touches.length; ++i) {
         var touch = e.touches[i];
+        touch.changed = false;
         touches[touch.identifier] = touch;
       }
       for(var i = 0; i < e.changedTouches.length; ++i) {
@@ -1863,9 +2005,9 @@ var LibraryJSEvents = {
       {{{ makeSetValue('ptr', C_STRUCTS.EmscriptenTouchEvent.metaKey, 'e.metaKey', 'i32') }}};
       ptr += {{{ C_STRUCTS.EmscriptenTouchEvent.touches }}}; // Advance to the start of the touch array.
 #if !DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR
-      var canvasRect = Module['canvas'] ? Module['canvas'].getBoundingClientRect() : undefined;
+      var canvasRect = Module['canvas'] ? __getBoundingClientRect(Module['canvas']) : undefined;
 #endif
-      var targetRect = JSEvents.getBoundingClientRectOrZeros(target);
+      var targetRect = __getBoundingClientRect(target);
       var numTouches = 0;
       for(var i in touches) {
         var t = touches[i];
@@ -1982,15 +2124,15 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.gamepadEvent) JSEvents.gamepadEvent = _malloc( {{{ C_STRUCTS.EmscriptenGamepadEvent.__size__ }}} );
 
-    var gamepadEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var gamepadEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var gamepadEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenGamepadEvent.__size__ }}} ) : JSEvents.gamepadEvent;
 #else
       var gamepadEvent = JSEvents.gamepadEvent;
 #endif
-      __fillGamepadEventData(gamepadEvent, e.gamepad);
+      __fillGamepadEventData(gamepadEvent, e["gamepad"]);
 
 #if USE_PTHREADS
       if (targetThread) JSEvents.queueEventHandlerOnThread_iiii(targetThread, callbackfunc, eventTypeId, gamepadEvent, userData);
@@ -2071,8 +2213,8 @@ var LibraryJSEvents = {
   
   _registerBeforeUnloadEventCallback__deps: ['$JSEvents', '_findEventTarget'],
   _registerBeforeUnloadEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString) {
-    var beforeUnloadEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var beforeUnloadEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
       // Note: This is always called on the main browser thread, since it needs synchronously return a value!
       var confirmationMessage = {{{ makeDynCall('iiii') }}}(callbackfunc, eventTypeId, 0, userData);
@@ -2102,7 +2244,7 @@ var LibraryJSEvents = {
   emscripten_set_beforeunload_callback_on_thread__sig: 'iii',
   emscripten_set_beforeunload_callback_on_thread__deps: ['_registerBeforeUnloadEventCallback'],
   emscripten_set_beforeunload_callback_on_thread: function(userData, callbackfunc, targetThread) {
-    if (typeof window.onbeforeunload === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
+    if (typeof onbeforeunload === 'undefined') return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
     // beforeunload callback can only be registered on the main browser thread, because the page will go away immediately after returning from the handler,
     // and there is no time to start proxying it anywhere.
     if (targetThread !== {{{ cDefine('EM_CALLBACK_THREAD_CONTEXT_MAIN_BROWSER_THREAD') }}}) return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_PARAM') }}};
@@ -2126,8 +2268,8 @@ var LibraryJSEvents = {
 #endif
     if (!JSEvents.batteryEvent) JSEvents.batteryEvent = _malloc( {{{ C_STRUCTS.EmscriptenBatteryEvent.__size__ }}} );
 
-    var batteryEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var batteryEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       var batteryEvent = targetThread ? _malloc( {{{ C_STRUCTS.EmscriptenBatteryEvent.__size__ }}} ) : JSEvents.batteryEvent;
@@ -2183,6 +2325,9 @@ var LibraryJSEvents = {
 
   // Execute in calling thread without proxying needed.
   emscripten_webgl_init_context_attributes: function(attributes) {
+#if ASSERTIONS
+    assert(attributes);
+#endif
     var a = attributes >> 2;
     for(var i = 0; i < ({{{ C_STRUCTS.EmscriptenWebGLContextAttributes.__size__ }}}>>2); ++i) {
       HEAP32[a+i] = 0;
@@ -2205,7 +2350,9 @@ var LibraryJSEvents = {
 
   _emscripten_webgl_power_preferences: "['default', 'low-power', 'high-performance']",
 
-#if !USE_PTHREADS
+// In offscreen framebuffer mode, we implement these functions in C so that they enable
+// the proxying of GL commands. Otherwise, they are implemented here in JS.
+#if !(USE_PTHREADS && OFFSCREEN_FRAMEBUFFER)
   emscripten_webgl_create_context__sig: 'iii',
   emscripten_webgl_create_context: 'emscripten_webgl_do_create_context',
 
@@ -2216,9 +2363,16 @@ var LibraryJSEvents = {
   emscripten_webgl_commit_frame: 'emscripten_webgl_do_commit_frame',
 #endif
 
-  emscripten_webgl_do_create_context__deps: ['$GL', '$JSEvents', '_emscripten_webgl_power_preferences', '_findEventTarget', '_findCanvasEventTarget'],
+  // This code is called from the main proxying logic, which has a big switch
+  // for all the messages, one of which is this GL-using one. This won't be
+  // called if GL is not linked in, but also make sure to not add a dep on
+  // GL unnecessarily from here, as that would cause a linker error.
+  emscripten_webgl_do_create_context__deps: maybeAddGLDep(['$JSEvents', '_emscripten_webgl_power_preferences', '_findEventTarget', '_findCanvasEventTarget']),
   // This function performs proxying manually, depending on the style of context that is to be created.
   emscripten_webgl_do_create_context: function(target, attributes) {
+#if ASSERTIONS
+    assert(attributes);
+#endif
     var contextAttributes = {};
     var a = attributes >> 2;
     contextAttributes['alpha'] = !!HEAP32[a + ({{{ C_STRUCTS.EmscriptenWebGLContextAttributes.alpha }}}>>2)];
@@ -2243,7 +2397,7 @@ var LibraryJSEvents = {
     var targetStr = UTF8ToString(target);
 #endif
 
-#if USE_PTHREADS
+#if (USE_PTHREADS && OFFSCREEN_FRAMEBUFFER)
     // Create a WebGL context that is proxied to main thread if canvas was not found on worker, or if explicitly requested to do so.
     if (ENVIRONMENT_IS_PTHREAD) {
       if (contextAttributes.proxyContextToMainThread === {{{ cDefine('EMSCRIPTEN_WEBGL_CONTEXT_PROXY_ALWAYS') }}} ||
@@ -2274,7 +2428,7 @@ var LibraryJSEvents = {
     }
 
 #if OFFSCREENCANVAS_SUPPORT
-    canvas = canvas.offscreenCanvas;
+    if (canvas.offscreenCanvas) canvas = canvas.offscreenCanvas;
 
 #if GL_DEBUG
     if (typeof OffscreenCanvas !== 'undefined' && canvas instanceof OffscreenCanvas) console.log('emscripten_webgl_create_context: Creating an OffscreenCanvas-based WebGL context on target "' + targetStr + '"');
@@ -2342,7 +2496,7 @@ var LibraryJSEvents = {
     var contextHandle = GL.createContext(canvas, contextAttributes);
     return contextHandle;
   },
-#if USE_PTHREADS
+#if USE_PTHREADS && OFFSCREEN_FRAMEBUFFER
   // Runs on the calling thread, proxies if needed.
   emscripten_webgl_make_context_current_calling_thread: function(contextHandle) {
     var success = GL.makeContextCurrent(contextHandle);
@@ -2416,19 +2570,15 @@ var LibraryJSEvents = {
       return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
     }
 #endif
-    if (!GL.currentContext.GLctx.commit) {
-#if GL_DEBUG
-      console.error('emscripten_webgl_commit_frame() failed: OffscreenCanvas is not supported by the current GL context!');
-#endif
-      return {{{ cDefine('EMSCRIPTEN_RESULT_NOT_SUPPORTED') }}};
-    }
     if (!GL.currentContext.attributes.explicitSwapControl) {
 #if GL_DEBUG
       console.error('emscripten_webgl_commit_frame() cannot be called for canvases with implicit swap control mode!');
 #endif
       return {{{ cDefine('EMSCRIPTEN_RESULT_INVALID_TARGET') }}};
     }
-    GL.currentContext.GLctx.commit();
+    // We would do GL.currentContext.GLctx.commit(); here, but the current implementation
+    // in browsers has removed it - swap is implicit, so this function is a no-op for now
+    // (until/unless the spec changes).
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
 
@@ -2486,6 +2636,12 @@ var LibraryJSEvents = {
     var context = GL.getContext(contextHandle);
     var extString = UTF8ToString(extension);
     if (extString.indexOf('GL_') == 0) extString = extString.substr(3); // Allow enabling extensions both with "GL_" prefix and without.
+
+    // Obtain function entry points to extension related functions.
+    if (extString == 'ANGLE_instanced_arrays') GL.acquireInstancedArraysExtension(GLctx);
+    else if (extString == 'OES_vertex_array_object') GL.acquireVertexArrayObjectExtension(GLctx);
+    else if (extString == 'WEBGL_draw_buffers') GL.acquireDrawBuffersExtension(GLctx);
+
     var ext = context.GLctx.getExtension(extString);
     return !!ext;
   },
@@ -2523,8 +2679,8 @@ var LibraryJSEvents = {
     if (!target) target = Module['canvas'];
 #endif
 
-    var webGlEventHandlerFunc = function(event) {
-      var e = event || window.event;
+    var webGlEventHandlerFunc = function(ev) {
+      var e = ev || event;
 
 #if USE_PTHREADS
       if (targetThread) JSEvents.queueEventHandlerOnThread_iiii(targetThread, callbackfunc, eventTypeId, 0, userData);
@@ -2802,7 +2958,7 @@ var LibraryJSEvents = {
 
   emscripten_get_element_css_size__proxy: 'sync',
   emscripten_get_element_css_size__sig: 'iiii',
-  emscripten_get_element_css_size__deps: ['$JSEvents', '_findEventTarget'],
+  emscripten_get_element_css_size__deps: ['$JSEvents', '_findEventTarget', '_getBoundingClientRect'],
   emscripten_get_element_css_size: function(target, width, height) {
 #if DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR
     target = __findEventTarget(target);
@@ -2811,14 +2967,15 @@ var LibraryJSEvents = {
 #endif
     if (!target) return {{{ cDefine('EMSCRIPTEN_RESULT_UNKNOWN_TARGET') }}};
 
-    if (target.getBoundingClientRect) {
-      var rect = target.getBoundingClientRect();
-      {{{ makeSetValue('width', '0', 'rect.right - rect.left', 'double') }}};
-      {{{ makeSetValue('height', '0', 'rect.bottom - rect.top', 'double') }}};
-    } else {
-      {{{ makeSetValue('width', '0', 'target.clientWidth', 'double') }}};
-      {{{ makeSetValue('height', '0', 'target.clientHeight', 'double') }}};
-    }
+    var rect = __getBoundingClientRect(target);
+#if LEGACY_VM_SUPPORT
+    {{{ makeSetValue('width', '0', 'rect.right - rect.left', 'double') }}};
+    {{{ makeSetValue('height', '0', 'rect.bottom - rect.top', 'double') }}};
+#else
+    // N.b. .getBoundingClientRect(element).width & .height do not exist on IE 8, so IE 9+ is needed.
+    {{{ makeSetValue('width', '0', 'rect.width', 'double') }}};
+    {{{ makeSetValue('height', '0', 'rect.height', 'double') }}};
+#endif
 
     return {{{ cDefine('EMSCRIPTEN_RESULT_SUCCESS') }}};
   },
@@ -2858,7 +3015,7 @@ var LibraryJSEvents = {
         '++__setImmediate_id_counter;\n' +
       '}\n' +
     '}\n' +
-    'if (typeof setImmediate === "undefined") {\n' +
+    'if (typeof setImmediate === "undefined" && typeof addEventListener === "function") {\n' +
       'addEventListener("message", __setImmediate_cb, true);\n' +
       'setImmediate = function(func) {\n' +
         'postMessage(__setImmediate_message_id, "*");\n' +
@@ -2974,14 +3131,18 @@ var LibraryJSEvents = {
     throw UTF8ToString(str);
   },
 
+  emscripten_unwind_to_js_event_loop: function() {
+    throw 'unwind';
+  },
+
   emscripten_get_device_pixel_ratio__proxy: 'sync',
   emscripten_get_device_pixel_ratio__sig: 'd',
   emscripten_get_device_pixel_ratio: function() {
 #if WASM && ENVIRONMENT == 'web'
-    // Save a little bit of code space: all Wasm-capable browsers support window.devicePixelRatio.
-    return window.devicePixelRatio;
+    // Save a little bit of code space: all Wasm-capable browsers support devicePixelRatio.
+    return devicePixelRatio;
 #else
-    return window.devicePixelRatio || 1.0;
+    return devicePixelRatio || 1.0;
 #endif
   }
 };

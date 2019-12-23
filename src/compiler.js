@@ -144,9 +144,9 @@ load('utility.js');
 // Load settings, can be overridden by commandline
 
 load('settings.js');
+load('settings_internal.js');
 
 var settings_file = arguments_[0];
-additionalLibraries = Array.prototype.slice.call(arguments_, 1);
 
 if (settings_file) {
   var settings = JSON.parse(read(settings_file));
@@ -168,6 +168,7 @@ if (settings_file) {
 EXPORTED_FUNCTIONS = set(EXPORTED_FUNCTIONS);
 EXCEPTION_CATCHING_WHITELIST = set(EXCEPTION_CATCHING_WHITELIST);
 IMPLEMENTED_FUNCTIONS = set(IMPLEMENTED_FUNCTIONS);
+INCOMING_MODULE_JS_API = set(INCOMING_MODULE_JS_API);
 
 DEAD_FUNCTIONS.forEach(function(dead) {
   DEFAULT_LIBRARY_FUNCS_TO_INCLUDE.push(dead.substr(1));
@@ -186,15 +187,21 @@ load('modules.js');
 load('parseTools.js');
 load('jsifier.js');
 globalEval(processMacros(preprocess(read('runtime.js'), 'runtime.js')));
-Runtime.QUANTUM_SIZE = QUANTUM_SIZE;
+Runtime.QUANTUM_SIZE = 4;
 
 // State computations
 
 var ENVIRONMENTS = ENVIRONMENT.split(',');
 ENVIRONMENT_MAY_BE_WEB    = !ENVIRONMENT || ENVIRONMENTS.indexOf('web') >= 0;
-ENVIRONMENT_MAY_BE_WORKER = !ENVIRONMENT || ENVIRONMENTS.indexOf('worker') >= 0;
 ENVIRONMENT_MAY_BE_NODE   = !ENVIRONMENT || ENVIRONMENTS.indexOf('node') >= 0;
 ENVIRONMENT_MAY_BE_SHELL  = !ENVIRONMENT || ENVIRONMENTS.indexOf('shell') >= 0;
+
+// The worker case also includes Node.js workers when pthreads are
+// enabled and Node.js is one of the supported environments for the build to
+// run on. Node.js workers are detected as a combination of
+// ENVIRONMENT_IS_WORKER and ENVIRONMENT_HAS_NODE.
+ENVIRONMENT_MAY_BE_WORKER = !ENVIRONMENT || ENVIRONMENTS.indexOf('worker') >= 0 ||
+                            (ENVIRONMENT_MAY_BE_NODE && USE_PTHREADS);
 
 if (ENVIRONMENT && !(ENVIRONMENT_MAY_BE_WEB || ENVIRONMENT_MAY_BE_WORKER || ENVIRONMENT_MAY_BE_NODE || ENVIRONMENT_MAY_BE_SHELL)) {
   throw 'Invalid environment specified in "ENVIRONMENT": ' + ENVIRONMENT + '. Should be one of: web, worker, node, shell.';

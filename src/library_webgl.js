@@ -15,6 +15,55 @@ var LibraryGL = {
   _tempFixedLengthArray__postset: 'for (var i = 0; i < 32; i++) __tempFixedLengthArray.push(new Array(i));',
   _tempFixedLengthArray: [],
 
+  _heapObjectForWebGLType: function(type) {
+    // Micro-optimization for size: Subtract lowest GL enum number (0x1400/* GL_BYTE */) from type to compare
+    // smaller values for the heap, for shorter generated code size.
+    // Also the type HEAPU16 is not tested for explicitly, but any unrecognized type will return out HEAPU16.
+    // (since most types are HEAPU16)
+    type -= 0x1400;
+#if USE_WEBGL2
+    if (type == {{{ 0x1400 - 0x1400/* GL_BYTE */ }}}) return HEAP8;
+#endif
+
+    if (type == {{{ 0x1401 - 0x1400/* GL_UNSIGNED_BYTE */ }}}) return HEAPU8;
+
+#if USE_WEBGL2
+    if (type == {{{ 0x1402 - 0x1400/* GL_SHORT */ }}}) return HEAP16;
+#endif
+
+    if (type == {{{ 0x1404 - 0x1400/* GL_INT */ }}}) return HEAP32;
+
+    if (type == {{{ 0x1406 - 0x1400/* GL_FLOAT */ }}}) return HEAPF32;
+
+    if (type == {{{ 0x1405 - 0x1400 /* GL_UNSIGNED_INT */ }}}
+      || type == {{{ 0x84FA - 0x1400 /* GL_UNSIGNED_INT_24_8_WEBGL/GL_UNSIGNED_INT_24_8 */ }}}
+#if USE_WEBGL2
+      || type == {{{ 0x8368 - 0x1400 /* GL_UNSIGNED_INT_2_10_10_10_REV */ }}}
+      || type == {{{ 0x8C3B - 0x1400 /* GL_UNSIGNED_INT_10F_11F_11F_REV */ }}}
+      || type == {{{ 0x8C3E - 0x1400 /* GL_UNSIGNED_INT_5_9_9_9_REV */ }}}
+#endif
+      )
+      return HEAPU32;
+
+#if GL_ASSERTIONS
+      if (type != {{{ 0x1403 - 0x1400 /* GL_UNSIGNED_SHORT */ }}}
+#if USE_WEBGL2
+        && type != {{{ 0x140B - 0x1400 /* GL_HALF_FLOAT */ }}}
+#endif
+        && type != {{{ 0x8033 - 0x1400 /* GL_UNSIGNED_SHORT_4_4_4_4 */ }}}
+        && type != {{{ 0x8034 - 0x1400 /* GL_UNSIGNED_SHORT_5_5_5_1 */ }}}
+        && type != {{{ 0x8363 - 0x1400 /* GL_UNSIGNED_SHORT_5_6_5 */ }}}
+        && type != {{{ 0x8D61 - 0x1400 /* GL_HALF_FLOAT_OES */ }}}) {
+        err('Invalid WebGL type 0x' + (type+0x1400).toString() + ' passed to _heapObjectForWebGLType!');
+      }
+#endif
+    return HEAPU16;
+  },
+
+  _heapAccessShiftForWebGLHeap: function(heap) {
+    return 31 - Math.clz32(heap.BYTES_PER_ELEMENT);
+  },
+
   $GL__postset: 'var GLctx; GL.init()',
   $GL: {
 #if GL_DEBUG
@@ -84,9 +133,14 @@ var LibraryGL = {
       GL.createLog2ceilLookup(GL.MAX_TEMP_BUFFER_SIZE);
 #endif
 #if GL_POOL_TEMP_BUFFERS
-      GL.miniTempBuffer = new Float32Array(GL.MINI_TEMP_BUFFER_SIZE);
+      var miniTempFloatBuffer = new Float32Array(GL.MINI_TEMP_BUFFER_SIZE);
       for (var i = 0; i < GL.MINI_TEMP_BUFFER_SIZE; i++) {
-        GL.miniTempBufferViews[i] = GL.miniTempBuffer.subarray(0, i+1);
+        GL.miniTempBufferFloatViews[i] = miniTempFloatBuffer.subarray(0, i+1);
+      }
+
+      var miniTempIntBuffer = new Int32Array(GL.MINI_TEMP_BUFFER_SIZE);
+      for (var i = 0; i < GL.MINI_TEMP_BUFFER_SIZE; i++) {
+        GL.miniTempBufferIntViews[i] = miniTempIntBuffer.subarray(0, i+1);
       }
 #endif
     },
@@ -112,8 +166,8 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     // Mini temp buffer
     MINI_TEMP_BUFFER_SIZE: 256,
-    miniTempBuffer: null,
-    miniTempBufferViews: [0], // index i has the view of size i+1
+    miniTempBufferFloatViews: [0], // index i has the view of size i+1
+    miniTempBufferIntViews: [0], // index i has the view of size i+1
 #endif
 
 #if FULL_ES2 || LEGACY_GL_EMULATION
@@ -363,11 +417,16 @@ var LibraryGL = {
           break;
         default:
 #if USE_WEBGL2
-          if (GL.currentContext.version >= 2 && (dataType == 0x8368 /* GL_UNSIGNED_INT_2_10_10_10_REV */ || dataType == 0x8D9F /* GL_INT_2_10_10_10_REV */)) {
-            sizeBytes = 4;
-            break;
-          } else {
-            // else fall through
+          if (GL.currentContext.version >= 2) {
+            if (dataType == 0x8368 /* GL_UNSIGNED_INT_2_10_10_10_REV */ || dataType == 0x8D9F /* GL_INT_2_10_10_10_REV */) {
+              sizeBytes = 4;
+              break;
+            } else if (dataType == 0x140B /* GL_HALF_FLOAT */) {
+              sizeBytes = 2;
+              break;
+            } else {
+              // else fall through
+            }
           }
 #endif
           console.error('Invalid vertex attribute data type GLenum ' + dataType + ' passed to GL function!');
@@ -472,6 +531,18 @@ var LibraryGL = {
       webGLContextAttributes['preserveDrawingBuffer'] = true;
 #endif
 
+#if USE_WEBGL2 && MIN_CHROME_VERSION <= 57
+      // BUG: Workaround Chrome WebGL 2 issue: the first shipped versions of WebGL 2 in Chrome 57 did not actually implement
+      // the new garbage free WebGL 2 entry points that take an offset and a length to an existing heap (instead of having to
+      // create a completely new heap view). In Chrome the entry points only were added in to Chrome 58 and newer. For
+      // Chrome 57 (and older), disable WebGL 2 support altogether.
+      function getChromeVersion() {
+        var chromeVersion = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
+        if (chromeVersion) return chromeVersion[2]|0;
+        // If not chrome, fall through to return undefined. (undefined <= integer will yield false)
+      }
+#endif
+
 #if GL_DEBUG
       var errorInfo = '?';
       function onContextCreationError(event) {
@@ -496,9 +567,21 @@ var LibraryGL = {
 
       var ctx = 
 #if USE_WEBGL2
-        (webGLContextAttributes.majorVersion > 1) ? canvas.getContext("webgl2", webGLContextAttributes) :
+        (webGLContextAttributes.majorVersion > 1)
+        ?
+#if MIN_CHROME_VERSION <= 57
+          !(getChromeVersion() <= 57) && canvas.getContext("webgl2", webGLContextAttributes)
+#else
+          canvas.getContext("webgl2", webGLContextAttributes)
 #endif
-        (canvas.getContext("webgl", webGLContextAttributes) || canvas.getContext("experimental-webgl", webGLContextAttributes));
+        :
+#endif
+        (canvas.getContext("webgl", webGLContextAttributes)
+          // https://caniuse.com/#feat=webgl
+#if MIN_IE_VERSION <= 10 || MIN_EDGE_VERSION <= 18 || MIN_FIREFOX_VERSION <= 23 || MIN_CHROME_VERSION <= 32 || MIN_SAFARI_VERSION <= 70101
+          || canvas.getContext("experimental-webgl", webGLContextAttributes)
+#endif
+          );
 
 #if GL_PREINITIALIZED_CONTEXT
       }
@@ -508,12 +591,50 @@ var LibraryGL = {
       canvas.removeEventListener('webglcontextcreationerror', onContextCreationError, false);
       if (!ctx) {
         err('Could not create canvas: ' + [errorInfo, JSON.stringify(webGLContextAttributes)]);
+        return 0;
       }
+#else
+      if (!ctx) return 0;
 #endif
+
+      var handle = GL.registerContext(ctx, webGLContextAttributes);
+
 #if TRACE_WEBGL_CALLS
-      if (ctx) GL.hookWebGL(ctx);
+      GL.hookWebGL(ctx);
 #endif
-      return ctx && GL.registerContext(ctx, webGLContextAttributes);
+
+#if GL_DISABLE_HALF_FLOAT_EXTENSION_IF_BROKEN
+      function disableHalfFloatExtensionIfBroken(ctx) {
+        var t = ctx.createTexture();
+        ctx.bindTexture(0x0de1/*GL_TEXTURE_2D*/, t);
+        for (var i = 0; i < 8 && ctx.getError(); ++i) /*no-op*/;
+        var ext = ctx.getExtension('OES_texture_half_float');
+        if (!ext) return; // no half-float extension - nothing needed to fix.
+        // Bug on Safari on iOS and macOS: texImage2D() and texSubImage2D() do not allow uploading pixel data to half float textures,
+        // rendering them useless.
+        // See https://bugs.webkit.org/show_bug.cgi?id=183321, https://bugs.webkit.org/show_bug.cgi?id=169999,
+        // https://stackoverflow.com/questions/54248633/cannot-create-half-float-oes-texture-from-uint16array-on-ipad
+        ctx.texImage2D(0x0de1/*GL_TEXTURE_2D*/, 0, 0x1908/*GL_RGBA*/, 1, 1, 0, 0x1908/*GL_RGBA*/, 0x8d61/*HALF_FLOAT_OES*/, new Uint16Array(4));
+        var broken = ctx.getError();
+        ctx.bindTexture(0x0de1/*GL_TEXTURE_2D*/, null);
+        ctx.deleteTexture(t);
+        if (broken) {
+          ctx.realGetSupportedExtensions = ctx.getSupportedExtensions;
+          ctx.getSupportedExtensions = function() {
+#if GL_ASSERTIONS
+            warnOnce('Removed broken support for half-float textures. See e.g. https://bugs.webkit.org/show_bug.cgi?id=183321');
+#endif
+            // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
+            return (this.realGetSupportedExtensions() || []).filter(function(ext) {
+              return ext.indexOf('texture_half_float') == -1;
+            });
+          }
+        }
+      }
+      disableHalfFloatExtensionIfBroken(ctx);
+#endif
+
+      return handle;
     },
 
 #if OFFSCREEN_FRAMEBUFFER
@@ -776,16 +897,6 @@ var LibraryGL = {
         GLctx: ctx
       };
 
-#if USE_WEBGL2
-      // BUG: Workaround Chrome WebGL 2 issue: the first shipped versions of WebGL 2 in Chrome did not actually implement the new WebGL 2 functions.
-      //      Those are supported only in Chrome 58 and newer.
-      function getChromeVersion() {
-        var raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
-        return raw ? parseInt(raw[2], 10) : false;
-      }
-      context.supportsWebGL2EntryPoints = (context.version >= 2) && (getChromeVersion() === false || getChromeVersion() >= 58);
-#endif
-
 #if WORKAROUND_OLD_WEBGL_UNIFORM_UPLOAD_IGNORED_OFFSET_BUG
       context.cannotHandleOffsetsInUniformArrayViews = (function(g) {
         function b(c, t) {
@@ -868,6 +979,35 @@ var LibraryGL = {
       GL.contexts[contextHandle] = null;
     },
 
+    acquireInstancedArraysExtension: function(ctx) {
+      // Extension available in WebGL 1 from Firefox 26 and Google Chrome 30 onwards. Core feature in WebGL 2.
+      var ext = ctx.getExtension('ANGLE_instanced_arrays');
+      if (ext) {
+        ctx['vertexAttribDivisor'] = function(index, divisor) { ext['vertexAttribDivisorANGLE'](index, divisor); };
+        ctx['drawArraysInstanced'] = function(mode, first, count, primcount) { ext['drawArraysInstancedANGLE'](mode, first, count, primcount); };
+        ctx['drawElementsInstanced'] = function(mode, count, type, indices, primcount) { ext['drawElementsInstancedANGLE'](mode, count, type, indices, primcount); };
+      }
+    },
+
+    acquireVertexArrayObjectExtension: function(ctx) {
+      // Extension available in WebGL 1 from Firefox 25 and WebKit 536.28/desktop Safari 6.0.3 onwards. Core feature in WebGL 2.
+      var ext = ctx.getExtension('OES_vertex_array_object');
+      if (ext) {
+        ctx['createVertexArray'] = function() { return ext['createVertexArrayOES'](); };
+        ctx['deleteVertexArray'] = function(vao) { ext['deleteVertexArrayOES'](vao); };
+        ctx['bindVertexArray'] = function(vao) { ext['bindVertexArrayOES'](vao); };
+        ctx['isVertexArray'] = function(vao) { return ext['isVertexArrayOES'](vao); };
+      }
+    },
+
+    acquireDrawBuffersExtension: function(ctx) {
+      // Extension available in WebGL 1 from Firefox 28 onwards. Core feature in WebGL 2.
+      var ext = ctx.getExtension('WEBGL_draw_buffers');
+      if (ext) {
+        ctx['drawBuffers'] = function(n, bufs) { ext['drawBuffersWEBGL'](n, bufs); };
+      }
+    },
+
     // In WebGL, extensions must be explicitly enabled to be active, see http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.14
     // In GLES2, all extensions are enabled by default without additional operations. Init all extensions we need to give to GLES2 user
     // code here, so that GLES2 code can operate without changing behavior.
@@ -887,27 +1027,9 @@ var LibraryGL = {
 #endif
 
       if (context.version < 2) {
-        // Extension available from Firefox 26 and Google Chrome 30
-        var instancedArraysExt = GLctx.getExtension('ANGLE_instanced_arrays');
-        if (instancedArraysExt) {
-          GLctx['vertexAttribDivisor'] = function(index, divisor) { instancedArraysExt['vertexAttribDivisorANGLE'](index, divisor); };
-          GLctx['drawArraysInstanced'] = function(mode, first, count, primcount) { instancedArraysExt['drawArraysInstancedANGLE'](mode, first, count, primcount); };
-          GLctx['drawElementsInstanced'] = function(mode, count, type, indices, primcount) { instancedArraysExt['drawElementsInstancedANGLE'](mode, count, type, indices, primcount); };
-        }
-
-        // Extension available from Firefox 25 and WebKit
-        var vaoExt = GLctx.getExtension('OES_vertex_array_object');
-        if (vaoExt) {
-          GLctx['createVertexArray'] = function() { return vaoExt['createVertexArrayOES'](); };
-          GLctx['deleteVertexArray'] = function(vao) { vaoExt['deleteVertexArrayOES'](vao); };
-          GLctx['bindVertexArray'] = function(vao) { vaoExt['bindVertexArrayOES'](vao); };
-          GLctx['isVertexArray'] = function(vao) { return vaoExt['isVertexArrayOES'](vao); };
-        }
-
-        var drawBuffersExt = GLctx.getExtension('WEBGL_draw_buffers');
-        if (drawBuffersExt) {
-          GLctx['drawBuffers'] = function(n, bufs) { drawBuffersExt['drawBuffersWEBGL'](n, bufs); };
-        }
+        GL.acquireInstancedArraysExtension(GLctx);
+        GL.acquireVertexArrayObjectExtension(GLctx);
+        GL.acquireDrawBuffersExtension(GLctx);
       }
 
       GLctx.disjointTimerQueryExt = GLctx.getExtension("EXT_disjoint_timer_query");
@@ -927,7 +1049,10 @@ var LibraryGL = {
                                              "WEBGL_compressed_texture_pvrtc", "EXT_color_buffer_half_float", "WEBGL_color_buffer_float",
                                              "EXT_sRGB", "WEBGL_compressed_texture_etc1", "EXT_disjoint_timer_query",
                                              "WEBGL_compressed_texture_etc", "WEBGL_compressed_texture_astc", "EXT_color_buffer_float",
-                                             "WEBGL_compressed_texture_s3tc_srgb", "EXT_disjoint_timer_query_webgl2"];
+                                             "WEBGL_compressed_texture_s3tc_srgb", "EXT_disjoint_timer_query_webgl2",
+                                             // Old style prefixed forms of extensions (but still currently used on e.g. iPhone Xs as
+                                             // tested on iOS 12.4.1):
+                                             "WEBKIT_WEBGL_compressed_texture_pvrtc"];
 
       function shouldEnableAutomatically(extension) {
         var ret = false;
@@ -939,14 +1064,12 @@ var LibraryGL = {
         return ret;
       }
 
-      var exts = GLctx.getSupportedExtensions();
-      if (exts && exts.length > 0) {
-        GLctx.getSupportedExtensions().forEach(function(ext) {
-          if (automaticallyEnabledExtensions.indexOf(ext) != -1) {
-            GLctx.getExtension(ext); // Calling .getExtension enables that extension permanently, no need to store the return value to be enabled.
-          }
-        });
-      }
+      var exts = GLctx.getSupportedExtensions() || []; // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
+      exts.forEach(function(ext) {
+        if (automaticallyEnabledExtensions.indexOf(ext) != -1) {
+          GLctx.getExtension(ext); // Calling .getExtension enables that extension permanently, no need to store the return value to be enabled.
+        }
+      });
     },
 
     // In WebGL, uniforms in a shader program are accessed through an opaque object type 'WebGLUniformLocation'.
@@ -1020,15 +1143,11 @@ var LibraryGL = {
     var ret;
     switch(name_) {
       case 0x1F03 /* GL_EXTENSIONS */:
-        var exts = GLctx.getSupportedExtensions();
-        var gl_exts = [];
-        for (var i = 0; i < exts.length; ++i) {
-          gl_exts.push(exts[i]);
+        var exts = GLctx.getSupportedExtensions() || []; // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
 #if GL_EXTENSIONS_IN_PREFIXED_FORMAT
-          gl_exts.push("GL_" + exts[i]);
+        exts = exts.concat(exts.map(function(e) { return "GL_" + e; }));
 #endif
-        }
-        ret = stringToNewUTF8(gl_exts.join(' '));
+        ret = stringToNewUTF8(exts.join(' '));
         break;
       case 0x1F00 /* GL_VENDOR */:
       case 0x1F01 /* GL_RENDERER */:
@@ -1102,12 +1221,14 @@ var LibraryGL = {
         ret = 1;
         break;
       case 0x8DF8: // GL_SHADER_BINARY_FORMATS
-        if (type !== 'Integer' && type !== 'Integer64') {
+#if GL_TRACK_ERRORS
+        if (type != {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}} && type != {{{ cDefine('EM_FUNC_SIG_PARAM_I64') }}}) {
           GL.recordError(0x0500); // GL_INVALID_ENUM
 #if GL_ASSERTIONS
           err('GL_INVALID_ENUM in glGet' + type + 'v(GL_SHADER_BINARY_FORMATS): Invalid parameter type!');
 #endif
         }
+#endif
         return; // Do not write anything to the out pointer, since no binary formats are supported.
 #if USE_WEBGL2
       case 0x87FE: // GL_NUM_PROGRAM_BINARY_FORMATS
@@ -1123,11 +1244,14 @@ var LibraryGL = {
         break;
 #if USE_WEBGL2
       case 0x821D: // GL_NUM_EXTENSIONS
+#if GL_TRACK_ERRORS
         if (GL.currentContext.version < 2) {
           GL.recordError(0x0502 /* GL_INVALID_OPERATION */); // Calling GLES3/WebGL2 function with a GLES2/WebGL1 context
           return;
         }
-        var exts = GLctx.getSupportedExtensions();
+#endif
+        // .getSupportedExtensions() can return null if context is lost, so coerce to empty array.
+        var exts = GLctx.getSupportedExtensions() || [];
 #if GL_EXTENSIONS_IN_PREFIXED_FORMAT
         ret = 2 * exts.length; // each extension is duplicated, first in unprefixed WebGL form, and then a second time with "GL_" prefix.
 #else
@@ -1136,10 +1260,12 @@ var LibraryGL = {
         break;
       case 0x821B: // GL_MAJOR_VERSION
       case 0x821C: // GL_MINOR_VERSION
+#if GL_TRACK_ERRORS
         if (GL.currentContext.version < 2) {
           GL.recordError(0x0500); // GL_INVALID_ENUM
           return;
         }
+#endif
         ret = name_ == 0x821B ? 3 : 0; // return version 3.0
         break;
 #endif
@@ -1194,57 +1320,65 @@ var LibraryGL = {
                      result instanceof Array) {
             for (var i = 0; i < result.length; ++i) {
               switch (type) {
-                case 'Integer': {{{ makeSetValue('p', 'i*4', 'result[i]',     'i32') }}};   break;
-                case 'Float':   {{{ makeSetValue('p', 'i*4', 'result[i]',     'float') }}}; break;
-                case 'Boolean': {{{ makeSetValue('p', 'i',   'result[i] ? 1 : 0', 'i8') }}};    break;
+                case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('p', 'i*4', 'result[i]', 'i32') }}}; break;
+                case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}: {{{ makeSetValue('p', 'i*4', 'result[i]', 'float') }}}; break;
+                case {{{ cDefine('EM_FUNC_SIG_PARAM_B') }}}: {{{ makeSetValue('p', 'i',   'result[i] ? 1 : 0', 'i8') }}}; break;
+#if GL_ASSERTIONS
                 default: throw 'internal glGet error, bad type: ' + type;
+#endif
               }
             }
             return;
           } else {
+#if GL_TRACK_ERRORS
             try {
+#endif
               ret = result.name | 0;
+#if GL_TRACK_ERRORS
             } catch(e) {
               GL.recordError(0x0500); // GL_INVALID_ENUM
               err('GL_INVALID_ENUM in glGet' + type + 'v: Unknown object returned from WebGL getParameter(' + name_ + ')! (error: ' + e + ')');
               return;
             }
+#endif
           }
           break;
+#if GL_TRACK_ERRORS
         default:
           GL.recordError(0x0500); // GL_INVALID_ENUM
-#if GL_ASSERTIONS
           err('GL_INVALID_ENUM in glGet' + type + 'v: Native code calling glGet' + type + 'v(' + name_ + ') and it returns ' + result + ' of type ' + typeof(result) + '!');
-#endif
           return;
+#endif
       }
     }
 
     switch (type) {
-      case 'Integer64': {{{ makeSetValue('p', '0', 'ret', 'i64') }}};    break;
-      case 'Integer': {{{ makeSetValue('p', '0', 'ret', 'i32') }}};    break;
-      case 'Float':   {{{ makeSetValue('p', '0', 'ret', 'float') }}};  break;
-      case 'Boolean': {{{ makeSetValue('p', '0', 'ret ? 1 : 0', 'i8') }}}; break;
+      case {{{ cDefine('EM_FUNC_SIG_PARAM_I64') }}}: {{{ makeSetValue('p', '0', 'ret', 'i64') }}};    break;
+      case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('p', '0', 'ret', 'i32') }}};    break;
+      case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}:   {{{ makeSetValue('p', '0', 'ret', 'float') }}};  break;
+      case {{{ cDefine('EM_FUNC_SIG_PARAM_B') }}}: {{{ makeSetValue('p', '0', 'ret ? 1 : 0', 'i8') }}}; break;
+#if GL_ASSERTIONS
       default: throw 'internal glGet error, bad type: ' + type;
+#endif
     }
   },
 
   glGetIntegerv__sig: 'vii',
   glGetIntegerv__deps: ['$emscriptenWebGLGet'],
   glGetIntegerv: function(name_, p) {
-    emscriptenWebGLGet(name_, p, 'Integer');
+    emscriptenWebGLGet(name_, p, {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}});
   },
 
   glGetFloatv__sig: 'vii',
   glGetFloatv__deps: ['$emscriptenWebGLGet'],
   glGetFloatv: function(name_, p) {
-    emscriptenWebGLGet(name_, p, 'Float');
+    emscriptenWebGLGet(name_, p, {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}});
   },
 
   glGetBooleanv__sig: 'vii',
   glGetBooleanv__deps: ['$emscriptenWebGLGet'],
   glGetBooleanv: function(name_, p) {
-    emscriptenWebGLGet(name_, p, 'Boolean');
+    emscriptenWebGLGet(name_, p, {{{ cDefine('EM_FUNC_SIG_PARAM_B') }}});
   },
 
   glDeleteTextures__sig: 'vii',
@@ -1262,7 +1396,7 @@ var LibraryGL = {
   glCompressedTexImage2D__sig: 'viiiiiiii',
   glCompressedTexImage2D: function(target, level, internalFormat, width, height, border, imageSize, data) {
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (GLctx.currentPixelUnpackBufferBinding) {
         GLctx['compressedTexImage2D'](target, level, internalFormat, width, height, border, imageSize, data);
       } else {
@@ -1278,7 +1412,7 @@ var LibraryGL = {
   glCompressedTexSubImage2D__sig: 'viiiiiiiii',
   glCompressedTexSubImage2D: function(target, level, xoffset, yoffset, width, height, format, imageSize, data) {
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (GLctx.currentPixelUnpackBufferBinding) {
         GLctx['compressedTexSubImage2D'](target, level, xoffset, yoffset, width, height, format, imageSize, data);
       } else {
@@ -1302,120 +1436,57 @@ var LibraryGL = {
     return height * alignedRowSize;
   },
 
-  _colorChannelsInGlTextureFormat: {
-    0x1906 /* GL_ALPHA */: 1,
-    0x1909 /* GL_LUMINANCE */: 1,
-    0x1902 /* GL_DEPTH_COMPONENT */: 1,
-    0x190A /* GL_LUMINANCE_ALPHA */: 2,
-    0x1907 /* GL_RGB */: 3,
-    0x8C40 /* GL_SRGB_EXT */: 3,
-    0x1908 /* GL_RGBA */: 4,
-    0x8C42 /* GL_SRGB_ALPHA_EXT */: 4,
+  _colorChannelsInGlTextureFormat: function(format) {
+    // Micro-optimizations for size: map format to size by subtracting smallest enum value (0x1902) from all values first.
+    // Also omit the most common size value (1) from the list, which is assumed by formats not on the list.
+    var colorChannels = {
+      // 0x1902 /* GL_DEPTH_COMPONENT */ - 0x1902: 1,
+      // 0x1906 /* GL_ALPHA */ - 0x1902: 1,
+      {{{ 0x1907 /* GL_RGB */ - 0x1902 }}}: 3,
+      {{{ 0x1908 /* GL_RGBA */ - 0x1902 }}}: 4,
+      // 0x1909 /* GL_LUMINANCE */ - 0x1902: 1,
+      {{{ 0x190A /*GL_LUMINANCE_ALPHA*/ - 0x1902 }}}: 2,
+      {{{ 0x8C40 /*(GL_SRGB_EXT)*/ - 0x1902 }}}: 3,
+      {{{ 0x8C42 /*(GL_SRGB_ALPHA_EXT*/ - 0x1902 }}}: 4,
 #if USE_WEBGL2
-    0x1903 /* GL_RED */: 1,
-    0x8D94 /* GL_RED_INTEGER */: 1,
-    0x8227 /* GL_RG */: 2,
-    0x8228 /* GL_RG_INTEGER*/: 2,
-    0x8D98 /* GL_RGB_INTEGER */: 3,
-    0x8D99 /* GL_RGBA_INTEGER */: 4
+      // 0x1903 /* GL_RED */ - 0x1902: 1,
+      {{{ 0x8227 /*GL_RG*/ - 0x1902 }}}: 2,
+      {{{ 0x8228 /*GL_RG_INTEGER*/ - 0x1902 }}}: 2,
+      // 0x8D94 /* GL_RED_INTEGER */ - 0x1902: 1,
+      {{{ 0x8D98 /*GL_RGB_INTEGER*/ - 0x1902 }}}: 3,
+      {{{ 0x8D99 /*GL_RGBA_INTEGER*/ - 0x1902 }}}: 4
 #endif
+    };
+#if GL_ASSERTIONS
+    if (!colorChannels[format - 0x1902]
+      && format != 0x1902 /* GL_DEPTH_COMPONENT */
+      && format != 0x1906 /* GL_ALPHA */
+      && format != 0x1909 /* GL_LUMINANCE */
+      && format != 0x1903 /* GL_RED */
+      && format != 0x8D94 /* GL_RED_INTEGER */) {
+      err('Invalid format=0x' + format.toString(16) + ' passed to function _colorChannelsInGlTextureFormat()!');
+    }
+#endif
+    return colorChannels[format - 0x1902]||1;
   },
 
-  _sizeOfGlTextureElementType: {
-    0x1401 /* GL_UNSIGNED_BYTE */: 1,
-    0x1403 /* GL_UNSIGNED_SHORT */: 2,
-    0x8D61 /* GL_HALF_FLOAT_OES */: 2,
-    0x1405 /* GL_UNSIGNED_INT */: 4,
-    0x1406 /* GL_FLOAT */: 4,
-    0x84FA /* GL_UNSIGNED_INT_24_8_WEBGL/GL_UNSIGNED_INT_24_8 */: 4,
-    0x8363 /* GL_UNSIGNED_SHORT_5_6_5 */: 2,
-    0x8033 /* GL_UNSIGNED_SHORT_4_4_4_4 */: 2,
-    0x8034 /* GL_UNSIGNED_SHORT_5_5_5_1 */: 2,
-#if USE_WEBGL2
-    0x1400 /* GL_BYTE */: 1,
-    0x140B /* GL_HALF_FLOAT */: 2,
-    0x1402 /* GL_SHORT */: 2,
-    0x1404 /* GL_INT */: 4,
-    0x8C3E /* GL_UNSIGNED_INT_5_9_9_9_REV */: 4,
-    0x8368 /* GL_UNSIGNED_INT_2_10_10_10_REV */: 4,
-    0x8C3B /* GL_UNSIGNED_INT_10F_11F_11F_REV */: 4,
-    0x84FA /* GL_UNSIGNED_INT_24_8 */: 4,
-#endif
-  },
-
-  $emscriptenWebGLGetTexPixelData__deps: ['_computeUnpackAlignedImageSize', '_colorChannelsInGlTextureFormat', '_sizeOfGlTextureElementType'],
+  $emscriptenWebGLGetTexPixelData__deps: ['_computeUnpackAlignedImageSize', '_colorChannelsInGlTextureFormat', '_heapObjectForWebGLType', '_heapAccessShiftForWebGLHeap'],
   $emscriptenWebGLGetTexPixelData: function(type, format, width, height, pixels, internalFormat) {
-    var sizePerPixel = __colorChannelsInGlTextureFormat[format] * __sizeOfGlTextureElementType[type];
-    if (!sizePerPixel) {
-      GL.recordError(0x0500); // GL_INVALID_ENUM
-#if GL_ASSERTIONS
-      if (!__colorChannelsInGlTextureFormat[format]) err('GL_INVALID_ENUM due to unknown format in glTex[Sub]Image/glReadPixels, format: ' + format);
-      else err('GL_INVALID_ENUM in glTex[Sub]Image/glReadPixels, type: ' + type + ', format: ' + format);
-#endif
-      return;
-    }
+    var heap = __heapObjectForWebGLType(type);
+    var shift = __heapAccessShiftForWebGLHeap(heap);
+    var byteSize = 1<<shift;
+    var sizePerPixel = __colorChannelsInGlTextureFormat(format) * byteSize;
     var bytes = __computeUnpackAlignedImageSize(width, height, sizePerPixel, GL.unpackAlignment);
-    var end = pixels + bytes;
-    switch(type) {
-#if USE_WEBGL2
-      case 0x1400 /* GL_BYTE */:
-        return HEAP8.subarray(pixels, end);
-#endif
-      case 0x1401 /* GL_UNSIGNED_BYTE */:
-        return HEAPU8.subarray(pixels, end);
-#if USE_WEBGL2
-      case 0x1402 /* GL_SHORT */:
 #if GL_ASSERTIONS
-        assert((pixels & 1) == 0, 'Pointer to int16 data passed to texture get function must be aligned to two bytes!');
+    assert((pixels >> shift) << shift == pixels, 'Pointer to texture data passed to texture get function must be aligned to the byte size of the pixel type!');
 #endif
-        return HEAP16.subarray(pixels>>1, end>>1);
-      case 0x1404 /* GL_INT */:
-#if GL_ASSERTIONS
-        assert((pixels & 3) == 0, 'Pointer to integer data passed to texture get function must be aligned to four bytes!');
-#endif
-        return HEAP32.subarray(pixels>>2, end>>2);
-#endif
-      case 0x1406 /* GL_FLOAT */:
-#if GL_ASSERTIONS
-        assert((pixels & 3) == 0, 'Pointer to float data passed to texture get function must be aligned to four bytes!');
-#endif
-        return HEAPF32.subarray(pixels>>2, end>>2);
-      case 0x1405 /* GL_UNSIGNED_INT */:
-      case 0x84FA /* GL_UNSIGNED_INT_24_8_WEBGL/GL_UNSIGNED_INT_24_8 */:
-#if USE_WEBGL2
-      case 0x8C3E /* GL_UNSIGNED_INT_5_9_9_9_REV */:
-      case 0x8368 /* GL_UNSIGNED_INT_2_10_10_10_REV */:
-      case 0x8C3B /* GL_UNSIGNED_INT_10F_11F_11F_REV */:
-      case 0x84FA /* GL_UNSIGNED_INT_24_8 */:
-#endif
-#if GL_ASSERTIONS
-        assert((pixels & 3) == 0, 'Pointer to integer data passed to texture get function must be aligned to four bytes!');
-#endif
-        return HEAPU32.subarray(pixels>>2, end>>2);
-      case 0x1403 /* GL_UNSIGNED_SHORT */:
-      case 0x8363 /* GL_UNSIGNED_SHORT_5_6_5 */:
-      case 0x8033 /* GL_UNSIGNED_SHORT_4_4_4_4 */:
-      case 0x8034 /* GL_UNSIGNED_SHORT_5_5_5_1 */:
-      case 0x8D61 /* GL_HALF_FLOAT_OES */:
-#if USE_WEBGL2
-      case 0x140B /* GL_HALF_FLOAT */:
-#endif
-#if GL_ASSERTIONS
-        assert((pixels & 1) == 0, 'Pointer to int16 data passed to texture get function must be aligned to two bytes!');
-#endif
-        return HEAPU16.subarray(pixels>>1, end>>1);
-      default:
-        GL.recordError(0x0500); // GL_INVALID_ENUM
-#if GL_ASSERTIONS
-        err('GL_INVALID_ENUM in glTex[Sub]Image/glReadPixels, type: ' + type);
-#endif
-    }
+    return heap.subarray(pixels >> shift, pixels + bytes >> shift);
   },
 
   glTexImage2D__sig: 'viiiiiiiii',
   glTexImage2D__deps: ['$emscriptenWebGLGetTexPixelData'
 #if USE_WEBGL2
-                       , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLType'
+                       , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLHeap'
 #endif
   ],
   glTexImage2D: function(target, level, internalFormat, width, height, border, format, type, pixels) {
@@ -1438,12 +1509,13 @@ var LibraryGL = {
       }
     }
 #endif
-    if (GL.currentContext.supportsWebGL2EntryPoints) {
+    if (GL.currentContext.version >= 2) {
       // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (GLctx.currentPixelUnpackBufferBinding) {
         GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
-      } else if (pixels != 0) {
-        GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, __heapObjectForWebGLType(type), pixels >> (__heapAccessShiftForWebGLType[type]|0));
+      } else if (pixels) {
+        var heap = __heapObjectForWebGLType(type);
+        GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, heap, pixels >> __heapAccessShiftForWebGLHeap(heap));
       } else {
         GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, null);
       }
@@ -1456,7 +1528,7 @@ var LibraryGL = {
   glTexSubImage2D__sig: 'viiiiiiiii',
   glTexSubImage2D__deps: ['$emscriptenWebGLGetTexPixelData'
 #if USE_WEBGL2
-                          , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLType'
+                          , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLHeap'
 #endif
   ],
   glTexSubImage2D: function(target, level, xoffset, yoffset, width, height, format, type, pixels) {
@@ -1469,12 +1541,13 @@ var LibraryGL = {
       if (type == 0x8d61/*GL_HALF_FLOAT_OES*/) type = 0x140B /*GL_HALF_FLOAT*/;
     }
 #endif
-    if (GL.currentContext.supportsWebGL2EntryPoints) {
+    if (GL.currentContext.version >= 2) {
       // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (GLctx.currentPixelUnpackBufferBinding) {
         GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
-      } else if (pixels != 0) {
-        GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, __heapObjectForWebGLType(type), pixels >> (__heapAccessShiftForWebGLType[type]|0));
+      } else if (pixels) {
+        var heap = __heapObjectForWebGLType(type);
+        GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, heap, pixels >> __heapAccessShiftForWebGLHeap(heap));
       } else {
         GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, null);
       }
@@ -1489,16 +1562,17 @@ var LibraryGL = {
   glReadPixels__sig: 'viiiiiii',
   glReadPixels__deps: ['$emscriptenWebGLGetTexPixelData'
 #if USE_WEBGL2
-                       , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLType'
+                       , '_heapObjectForWebGLType', '_heapAccessShiftForWebGLHeap'
 #endif
   ],
   glReadPixels: function(x, y, width, height, format, type, pixels) {
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (GLctx.currentPixelPackBufferBinding) {
         GLctx.readPixels(x, y, width, height, format, type, pixels);
       } else {
-        GLctx.readPixels(x, y, width, height, format, type, __heapObjectForWebGLType(type), pixels >> (__heapAccessShiftForWebGLType[type]|0));
+        var heap = __heapObjectForWebGLType(type);
+        GLctx.readPixels(x, y, width, height, format, type, heap, pixels >> __heapAccessShiftForWebGLHeap(heap));
       }
       return;
     }
@@ -1671,7 +1745,7 @@ var LibraryGL = {
     }
 #endif
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       if (data) {
         GLctx.bufferData(target, HEAPU8, usage, data, size);
       } else {
@@ -1690,7 +1764,7 @@ var LibraryGL = {
   glBufferSubData__sig: 'viiii',
   glBufferSubData: function(target, offset, size, data) {
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.bufferSubData(target, offset, HEAPU8, data, size);
       return;
     }
@@ -1898,15 +1972,15 @@ var LibraryGL = {
     var data = GLctx.getUniform(GL.programs[program], GL.uniforms[location]);
     if (typeof data == 'number' || typeof data == 'boolean') {
       switch (type) {
-        case 'Integer': {{{ makeSetValue('params', '0', 'data', 'i32') }}}; break;
-        case 'Float': {{{ makeSetValue('params', '0', 'data', 'float') }}}; break;
+        case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('params', '0', 'data', 'i32') }}}; break;
+        case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}: {{{ makeSetValue('params', '0', 'data', 'float') }}}; break;
         default: throw 'internal emscriptenWebGLGetUniform() error, bad type: ' + type;
       }
     } else {
       for (var i = 0; i < data.length; i++) {
         switch (type) {
-          case 'Integer': {{{ makeSetValue('params', 'i*4', 'data[i]', 'i32') }}}; break;
-          case 'Float': {{{ makeSetValue('params', 'i*4', 'data[i]', 'float') }}}; break;
+          case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('params', 'i*4', 'data[i]', 'i32') }}}; break;
+          case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}: {{{ makeSetValue('params', 'i*4', 'data[i]', 'float') }}}; break;
           default: throw 'internal emscriptenWebGLGetUniform() error, bad type: ' + type;
         }
       }
@@ -1916,13 +1990,13 @@ var LibraryGL = {
   glGetUniformfv__sig: 'viii',
   glGetUniformfv__deps: ['$emscriptenWebGLGetUniform'],
   glGetUniformfv: function(program, location, params) {
-    emscriptenWebGLGetUniform(program, location, params, 'Float');
+    emscriptenWebGLGetUniform(program, location, params, {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}});
   },
 
   glGetUniformiv__sig: 'viii',
   glGetUniformiv__deps: ['$emscriptenWebGLGetUniform'],
   glGetUniformiv: function(program, location, params) {
-    emscriptenWebGLGetUniform(program, location, params, 'Integer');
+    emscriptenWebGLGetUniform(program, location, params, {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}});
   },
 
   glGetUniformLocation__sig: 'iii',
@@ -1968,17 +2042,17 @@ var LibraryGL = {
       {{{ makeSetValue('params', '0', 'data["name"]', 'i32') }}};
     } else if (typeof data == 'number' || typeof data == 'boolean') {
       switch (type) {
-        case 'Integer': {{{ makeSetValue('params', '0', 'data', 'i32') }}}; break;
-        case 'Float': {{{ makeSetValue('params', '0', 'data', 'float') }}}; break;
-        case 'FloatToInteger': {{{ makeSetValue('params', '0', 'Math.fround(data)', 'i32') }}}; break;
+        case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('params', '0', 'data', 'i32') }}}; break;
+        case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}: {{{ makeSetValue('params', '0', 'data', 'float') }}}; break;
+        case {{{ cDefine('EM_FUNC_SIG_PARAM_F2I') }}}: {{{ makeSetValue('params', '0', 'Math.fround(data)', 'i32') }}}; break;
         default: throw 'internal emscriptenWebGLGetVertexAttrib() error, bad type: ' + type;
       }
     } else {
       for (var i = 0; i < data.length; i++) {
         switch (type) {
-          case 'Integer': {{{ makeSetValue('params', 'i*4', 'data[i]', 'i32') }}}; break;
-          case 'Float': {{{ makeSetValue('params', 'i*4', 'data[i]', 'float') }}}; break;
-          case 'FloatToInteger': {{{ makeSetValue('params', 'i*4', 'Math.fround(data[i])', 'i32') }}}; break;
+          case {{{ cDefine('EM_FUNC_SIG_PARAM_I') }}}: {{{ makeSetValue('params', 'i*4', 'data[i]', 'i32') }}}; break;
+          case {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}}: {{{ makeSetValue('params', 'i*4', 'data[i]', 'float') }}}; break;
+          case {{{ cDefine('EM_FUNC_SIG_PARAM_F2I') }}}: {{{ makeSetValue('params', 'i*4', 'Math.fround(data[i])', 'i32') }}}; break;
           default: throw 'internal emscriptenWebGLGetVertexAttrib() error, bad type: ' + type;
         }
       }
@@ -1990,7 +2064,7 @@ var LibraryGL = {
   glGetVertexAttribfv: function(index, pname, params) {
     // N.B. This function may only be called if the vertex attribute was specified using the function glVertexAttrib*f(),
     // otherwise the results are undefined. (GLES3 spec 6.1.12)
-    emscriptenWebGLGetVertexAttrib(index, pname, params, 'Float');
+    emscriptenWebGLGetVertexAttrib(index, pname, params, {{{ cDefine('EM_FUNC_SIG_PARAM_F') }}});
   },
 
   glGetVertexAttribiv__sig: 'viii',
@@ -1998,7 +2072,7 @@ var LibraryGL = {
   glGetVertexAttribiv: function(index, pname, params) {
     // N.B. This function may only be called if the vertex attribute was specified using the function glVertexAttrib*f(),
     // otherwise the results are undefined. (GLES3 spec 6.1.12)
-    emscriptenWebGLGetVertexAttrib(index, pname, params, 'FloatToInteger');
+    emscriptenWebGLGetVertexAttrib(index, pname, params, {{{ cDefine('EM_FUNC_SIG_PARAM_F2I') }}});
   },
 
   glGetVertexAttribPointerv__sig: 'viii',
@@ -2029,13 +2103,8 @@ var LibraryGL = {
     var info = GLctx.getActiveUniform(program, index);
     if (!info) return; // If an error occurs, nothing will be written to length, size, type and name.
 
-    if (bufSize > 0 && name) {
-      var numBytesWrittenExclNull = stringToUTF8(info.name, name, bufSize);
-      if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
-    } else {
-      if (length) {{{ makeSetValue('length', '0', 0, 'i32') }}};
-    }
-
+    var numBytesWrittenExclNull = (bufSize > 0 && name) ? stringToUTF8(info.name, name, bufSize) : 0;
+    if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
     if (size) {{{ makeSetValue('size', '0', 'info.size', 'i32') }}};
     if (type) {{{ makeSetValue('type', '0', 'info.type', 'i32') }}};
   },
@@ -2112,13 +2181,28 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform1iv(GL.uniforms[location], HEAP32, value>>2, count);
       return;
     }
 #endif
 
-    GLctx.uniform1iv(GL.uniforms[location], {{{ makeHEAPView('32', 'value', 'value+count*4') }}});
+#if GL_POOL_TEMP_BUFFERS
+    if (count <= GL.MINI_TEMP_BUFFER_SIZE) {
+      // avoid allocation when uploading few enough uniforms
+      var view = GL.miniTempBufferIntViews[count-1];
+      for (var i = 0; i < count; ++i) {
+        view[i] = {{{ makeGetValue('value', '4*i', 'i32') }}};
+      }
+    } else
+#endif
+    {
+      var view = {{{ makeHEAPView('32', 'value', 'value+count*4') }}};
+#if WORKAROUND_OLD_WEBGL_UNIFORM_UPLOAD_IGNORED_OFFSET_BUG
+      if (GL.currentContext.cannotHandleOffsetsInUniformArrayViews) view = new Int32Array(view);
+#endif
+    }
+    GLctx.uniform1iv(GL.uniforms[location], view);
   },
 
   glUniform2iv__sig: 'viii',
@@ -2129,13 +2213,29 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform2iv(GL.uniforms[location], HEAP32, value>>2, count*2);
       return;
     }
 #endif
 
-    GLctx.uniform2iv(GL.uniforms[location], {{{ makeHEAPView('32', 'value', 'value+count*8') }}});
+#if GL_POOL_TEMP_BUFFERS
+    if (2*count <= GL.MINI_TEMP_BUFFER_SIZE) {
+      // avoid allocation when uploading few enough uniforms
+      var view = GL.miniTempBufferIntViews[2*count-1];
+      for (var i = 0; i < 2*count; i += 2) {
+        view[i] = {{{ makeGetValue('value', '4*i', 'i32') }}};
+        view[i+1] = {{{ makeGetValue('value', '4*i+4', 'i32') }}};
+      }
+    } else
+#endif
+    {
+      var view = {{{ makeHEAPView('32', 'value', 'value+count*8') }}};
+#if WORKAROUND_OLD_WEBGL_UNIFORM_UPLOAD_IGNORED_OFFSET_BUG
+      if (GL.currentContext.cannotHandleOffsetsInUniformArrayViews) view = new Int32Array(view);
+#endif
+    }
+    GLctx.uniform2iv(GL.uniforms[location], view);
   },
 
   glUniform3iv__sig: 'viii',
@@ -2146,13 +2246,30 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform3iv(GL.uniforms[location], HEAP32, value>>2, count*3);
       return;
     }
 #endif
 
-    GLctx.uniform3iv(GL.uniforms[location], {{{ makeHEAPView('32', 'value', 'value+count*12') }}});
+#if GL_POOL_TEMP_BUFFERS
+    if (3*count <= GL.MINI_TEMP_BUFFER_SIZE) {
+      // avoid allocation when uploading few enough uniforms
+      var view = GL.miniTempBufferIntViews[3*count-1];
+      for (var i = 0; i < 3*count; i += 3) {
+        view[i] = {{{ makeGetValue('value', '4*i', 'i32') }}};
+        view[i+1] = {{{ makeGetValue('value', '4*i+4', 'i32') }}};
+        view[i+2] = {{{ makeGetValue('value', '4*i+8', 'i32') }}};
+      }
+    } else
+#endif
+    {
+      var view = {{{ makeHEAPView('32', 'value', 'value+count*12') }}};
+#if WORKAROUND_OLD_WEBGL_UNIFORM_UPLOAD_IGNORED_OFFSET_BUG
+      if (GL.currentContext.cannotHandleOffsetsInUniformArrayViews) view = new Int32Array(view);
+#endif
+    }
+    GLctx.uniform3iv(GL.uniforms[location], view);
   },
 
   glUniform4iv__sig: 'viii',
@@ -2163,13 +2280,31 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform4iv(GL.uniforms[location], HEAP32, value>>2, count*4);
       return;
     }
 #endif
 
-    GLctx.uniform4iv(GL.uniforms[location], {{{ makeHEAPView('32', 'value', 'value+count*16') }}});
+#if GL_POOL_TEMP_BUFFERS
+    if (4*count <= GL.MINI_TEMP_BUFFER_SIZE) {
+      // avoid allocation when uploading few enough uniforms
+      var view = GL.miniTempBufferIntViews[4*count-1];
+      for (var i = 0; i < 4*count; i += 4) {
+        view[i] = {{{ makeGetValue('value', '4*i', 'i32') }}};
+        view[i+1] = {{{ makeGetValue('value', '4*i+4', 'i32') }}};
+        view[i+2] = {{{ makeGetValue('value', '4*i+8', 'i32') }}};
+        view[i+3] = {{{ makeGetValue('value', '4*i+12', 'i32') }}};
+      }
+    } else
+#endif
+    {
+      var view = {{{ makeHEAPView('32', 'value', 'value+count*16') }}};
+#if WORKAROUND_OLD_WEBGL_UNIFORM_UPLOAD_IGNORED_OFFSET_BUG
+      if (GL.currentContext.cannotHandleOffsetsInUniformArrayViews) view = new Int32Array(view);
+#endif
+    }
+    GLctx.uniform4iv(GL.uniforms[location], view);
   },
 
   glUniform1fv__sig: 'viii',
@@ -2180,7 +2315,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform1fv(GL.uniforms[location], HEAPF32, value>>2, count);
       return;
     }
@@ -2189,7 +2324,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[count-1];
+      var view = GL.miniTempBufferFloatViews[count-1];
       for (var i = 0; i < count; ++i) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
       }
@@ -2212,7 +2347,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform2fv(GL.uniforms[location], HEAPF32, value>>2, count*2);
       return;
     }
@@ -2221,7 +2356,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (2*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[2*count-1];
+      var view = GL.miniTempBufferFloatViews[2*count-1];
       for (var i = 0; i < 2*count; i += 2) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2245,7 +2380,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform3fv(GL.uniforms[location], HEAPF32, value>>2, count*3);
       return;
     }
@@ -2254,7 +2389,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (3*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[3*count-1];
+      var view = GL.miniTempBufferFloatViews[3*count-1];
       for (var i = 0; i < 3*count; i += 3) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2279,7 +2414,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniform4fv(GL.uniforms[location], HEAPF32, value>>2, count*4);
       return;
     }
@@ -2288,7 +2423,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (4*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[4*count-1];
+      var view = GL.miniTempBufferFloatViews[4*count-1];
       for (var i = 0; i < 4*count; i += 4) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2314,7 +2449,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniformMatrix2fv(GL.uniforms[location], !!transpose, HEAPF32, value>>2, count*4);
       return;
     }
@@ -2323,7 +2458,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (4*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[4*count-1];
+      var view = GL.miniTempBufferFloatViews[4*count-1];
       for (var i = 0; i < 4*count; i += 4) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2349,7 +2484,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniformMatrix3fv(GL.uniforms[location], !!transpose, HEAPF32, value>>2, count*9);
       return;
     }
@@ -2358,7 +2493,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (9*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[9*count-1];
+      var view = GL.miniTempBufferFloatViews[9*count-1];
       for (var i = 0; i < 9*count; i += 9) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2389,7 +2524,7 @@ var LibraryGL = {
 #endif
 
 #if USE_WEBGL2
-    if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+    if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
       GLctx.uniformMatrix4fv(GL.uniforms[location], !!transpose, HEAPF32, value>>2, count*16);
       return;
     }
@@ -2398,7 +2533,7 @@ var LibraryGL = {
 #if GL_POOL_TEMP_BUFFERS
     if (16*count <= GL.MINI_TEMP_BUFFER_SIZE) {
       // avoid allocation when uploading few enough uniforms
-      var view = GL.miniTempBufferViews[16*count-1];
+      var view = GL.miniTempBufferFloatViews[16*count-1];
       for (var i = 0; i < 16*count; i += 16) {
         view[i] = {{{ makeGetValue('value', '4*i', 'float') }}};
         view[i+1] = {{{ makeGetValue('value', '4*i+4', 'float') }}};
@@ -2516,13 +2651,8 @@ var LibraryGL = {
     var info = GLctx.getActiveAttrib(program, index);
     if (!info) return; // If an error occurs, nothing will be written to length, size and type and name.
 
-    if (bufSize > 0 && name) {
-      var numBytesWrittenExclNull = stringToUTF8(info.name, name, bufSize);
-      if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
-    } else {
-      if (length) {{{ makeSetValue('length', '0', 0, 'i32') }}};
-    }
-
+    var numBytesWrittenExclNull = (bufSize > 0 && name) ? stringToUTF8(info.name, name, bufSize) : 0;
+    if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
     if (size) {{{ makeSetValue('size', '0', 'info.size', 'i32') }}};
     if (type) {{{ makeSetValue('type', '0', 'info.type', 'i32') }}};
   },
@@ -2625,12 +2755,8 @@ var LibraryGL = {
 #endif
     var result = GLctx.getShaderSource(GL.shaders[shader]);
     if (!result) return; // If an error occurs, nothing will be written to length or source.
-    if (bufSize > 0 && source) {
-      var numBytesWrittenExclNull = stringToUTF8(result, source, bufSize);
-      if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
-    } else {
-      if (length) {{{ makeSetValue('length', '0', 0, 'i32') }}};
-    }
+    var numBytesWrittenExclNull = (bufSize > 0 && source) ? stringToUTF8(result, source, bufSize) : 0;
+    if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
   },
 
   glCompileShader__sig: 'vi',
@@ -2651,13 +2777,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.shaders, shader, 'glGetShaderInfoLog', 'shader');
 #endif
     var log = GLctx.getShaderInfoLog(GL.shaders[shader]);
+#if GL_ASSERTIONS || GL_TRACK_ERRORS
     if (log === null) log = '(unknown error)';
-    if (maxLength > 0 && infoLog) {
-      var numBytesWrittenExclNull = stringToUTF8(log, infoLog, maxLength);
-      if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
-    } else {
-      if (length) {{{ makeSetValue('length', '0', 0, 'i32') }}};
-    }
+#endif
+    var numBytesWrittenExclNull = (maxLength > 0 && infoLog) ? stringToUTF8(log, infoLog, maxLength) : 0;
+    if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
   },
 
   glGetShaderiv__sig: 'viii',
@@ -2676,7 +2800,9 @@ var LibraryGL = {
 #endif
     if (pname == 0x8B84) { // GL_INFO_LOG_LENGTH
       var log = GLctx.getShaderInfoLog(GL.shaders[shader]);
+#if GL_ASSERTIONS || GL_TRACK_ERRORS
       if (log === null) log = '(unknown error)';
+#endif
       {{{ makeSetValue('p', '0', 'log.length + 1', 'i32') }}};
     } else if (pname == 0x8B88) { // GL_SHADER_SOURCE_LENGTH
       var source = GLctx.getShaderSource(GL.shaders[shader]);
@@ -2721,7 +2847,9 @@ var LibraryGL = {
 
     if (pname == 0x8B84) { // GL_INFO_LOG_LENGTH
       var log = GLctx.getProgramInfoLog(GL.programs[program]);
+#if GL_ASSERTIONS || GL_TRACK_ERRORS
       if (log === null) log = '(unknown error)';
+#endif
       {{{ makeSetValue('p', '0', 'log.length + 1', 'i32') }}};
     } else if (pname == 0x8B87 /* GL_ACTIVE_UNIFORM_MAX_LENGTH */) {
       {{{ makeSetValue('p', '0', 'ptable.maxUniformLength', 'i32') }}};
@@ -2829,14 +2957,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glGetProgramInfoLog', 'program');
 #endif
     var log = GLctx.getProgramInfoLog(GL.programs[program]);
+#if GL_ASSERTIONS || GL_TRACK_ERRORS
     if (log === null) log = '(unknown error)';
-
-    if (maxLength > 0 && infoLog) {
-      var numBytesWrittenExclNull = stringToUTF8(log, infoLog, maxLength);
-      if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
-    } else {
-      if (length) {{{ makeSetValue('length', '0', 0, 'i32') }}};
-    }
+#endif
+    var numBytesWrittenExclNull = (maxLength > 0 && infoLog) ? stringToUTF8(log, infoLog, maxLength) : 0;
+    if (length) {{{ makeSetValue('length', '0', 'numBytesWrittenExclNull', 'i32') }}};
   },
 
   glUseProgram__sig: 'vi',
@@ -3220,17 +3345,13 @@ var LibraryGL = {
 
   glGetError__sig: 'i',
   glGetError: function() {
-    // First return any GL error generated by the emscripten library_webgl.js interop layer.
 #if GL_TRACK_ERRORS
-    if (GL.lastError) {
-      var error = GL.lastError;
-      GL.lastError = 0/*GL_NO_ERROR*/;
-      return error;
-    } else
+    var error = GLctx.getError() || GL.lastError;
+    GL.lastError = 0/*GL_NO_ERROR*/;
+    return error;
+#else
+    return GLctx.getError();
 #endif
-    { // If there were none, return the GL error from the browser GL context.
-      return GLctx.getError();
-    }
   },
 
   // ANGLE_instanced_arrays WebGL extension related functions (in core in WebGL 2)
@@ -3446,7 +3567,7 @@ var LibraryGL = {
     GL.mappedBuffers[buffer] = null;
 
     if (!(mapping.access & 0x10)) /* GL_MAP_FLUSH_EXPLICIT_BIT */
-      if (GL.currentContext.supportsWebGL2EntryPoints) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
         GLctx.bufferSubData(target, mapping.offset, HEAPU8, mapping.mem, mapping.length);
       } else {
         GLctx.bufferSubData(target, mapping.offset, HEAPU8.subarray(mapping.mem, mapping.mem+mapping.length));

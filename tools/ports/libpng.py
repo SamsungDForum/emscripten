@@ -8,13 +8,14 @@ import shutil
 import logging
 
 TAG = 'version_1'
+HASH = 'a19ede8a4339f2745a490c22f3893899e1a5eae9d2b270e49d88d3a85239fbbaa26c9a352d0e6fb8bb69b4f45bd00c1ae9eff29b60cf03e79c5df45a4409992f'
 
 
 def get(ports, settings, shared):
   if settings.USE_LIBPNG != 1:
     return []
 
-  ports.fetch_project('libpng', 'https://github.com/emscripten-ports/libpng/archive/' + TAG + '.zip', 'libpng-' + TAG)
+  ports.fetch_project('libpng', 'https://github.com/emscripten-ports/libpng/archive/' + TAG + '.zip', 'libpng-' + TAG, sha512hash=HASH)
 
   libname = ports.get_lib_name('libpng')
 
@@ -28,6 +29,7 @@ def get(ports, settings, shared):
     shutil.copytree(source_path, dest_path)
 
     open(os.path.join(dest_path, 'pnglibconf.h'), 'w').write(pnglibconf_h)
+    ports.install_headers(dest_path)
 
     final = os.path.join(ports.get_build_dir(), 'libpng', libname)
     ports.build_port(dest_path, final, flags=['-s', 'USE_ZLIB=1'], exclude_files=['pngtest'], exclude_dirs=['scripts', 'contrib'])
@@ -48,7 +50,6 @@ def process_dependencies(settings):
 def process_args(ports, args, settings, shared):
   if settings.USE_LIBPNG == 1:
     get(ports, settings, shared)
-    args += ['-Xclang', '-isystem' + os.path.join(shared.Cache.get_path('ports-builds'), 'libpng')]
   return args
 
 

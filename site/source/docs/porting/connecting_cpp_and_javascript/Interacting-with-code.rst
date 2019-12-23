@@ -222,7 +222,7 @@ Integers and floating point values can be passed as is. Pointers are
 simply integers in the generated code.
 
 Strings in JavaScript must be converted to pointers for compiled
-code -- the relevant function is :js:func:`Pointer_stringify`, which
+code -- the relevant function is :js:func:`UTF8ToString`, which
 given a pointer returns a JavaScript string. Converting a JavaScript
 string ``someString`` to a pointer can be accomplished using ``ptr = ``
 allocate(intArrayFromString(someString), 'i8', ALLOC_NORMAL) <allocate>``.
@@ -297,10 +297,10 @@ an alert, followed by an exception. (Note, however, that under the hood
 Emscripten still does a function call even in this case, which has some
 amount of overhead.)
 
-You can also send values from C into JavaScript inside :c:macro:`EM_ASM_`
-(note the extra "_" at the end), for example::
+You can also send values from C into JavaScript inside :c:macro:`EM_ASM`,
+for example::
 
-   EM_ASM_({
+   EM_ASM({
      console.log('I received: ' + $0);
    }, 100);
 

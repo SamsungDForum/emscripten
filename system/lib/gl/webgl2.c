@@ -6,7 +6,7 @@
 #include "webgl1.h"
 #include "webgl2.h"
 
-#ifdef __EMSCRIPTEN_PTHREADS__
+#if defined(__EMSCRIPTEN_PTHREADS__) && defined(__EMSCRIPTEN_OFFSCREEN_FRAMEBUFFER__)
 
 ASYNC_GL_FUNCTION_1(EM_FUNC_SIG_VI, void, glReadBuffer, GLenum);
 ASYNC_GL_FUNCTION_6(EM_FUNC_SIG_VIIIIII, void, glDrawRangeElements, GLenum, GLuint, GLuint, GLsizei, GLenum, const void *); // TODO: Not async if rendering from client side memory
@@ -22,8 +22,10 @@ ASYNC_GL_FUNCTION_2(EM_FUNC_SIG_VII, void, glBeginQuery, GLenum, GLuint);
 ASYNC_GL_FUNCTION_1(EM_FUNC_SIG_VI, void, glEndQuery, GLenum);
 VOID_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glGetQueryiv, GLenum, GLenum, GLint *);
 VOID_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glGetQueryObjectuiv, GLuint, GLenum, GLuint *);
+#ifdef __EMSCRIPTEN_FULL_ES3__
 RET_SYNC_GL_FUNCTION_1(EM_FUNC_SIG_II, GLboolean, glUnmapBuffer, GLenum);
 VOID_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glGetBufferPointerv, GLenum, GLenum, void **);
+#endif
 VOID_SYNC_GL_FUNCTION_2(EM_FUNC_SIG_VII, void, glDrawBuffers, GLsizei, const GLenum *);
 VOID_SYNC_GL_FUNCTION_4(EM_FUNC_SIG_VIIII, void, glUniformMatrix2x3fv, GLint, GLsizei, GLboolean, const GLfloat *);
 VOID_SYNC_GL_FUNCTION_4(EM_FUNC_SIG_VIIII, void, glUniformMatrix3x2fv, GLint, GLsizei, GLboolean, const GLfloat *);
@@ -34,8 +36,10 @@ VOID_SYNC_GL_FUNCTION_4(EM_FUNC_SIG_VIIII, void, glUniformMatrix4x3fv, GLint, GL
 ASYNC_GL_FUNCTION_10(EM_FUNC_SIG_VIIIIIIIIII, void, glBlitFramebuffer, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
 ASYNC_GL_FUNCTION_5(EM_FUNC_SIG_VIIIII, void, glRenderbufferStorageMultisample, GLenum, GLsizei, GLenum, GLsizei, GLsizei);
 ASYNC_GL_FUNCTION_5(EM_FUNC_SIG_VIIIII, void, glFramebufferTextureLayer, GLenum, GLenum, GLuint, GLint, GLint);
+#ifdef __EMSCRIPTEN_FULL_ES3__
 RET_SYNC_GL_FUNCTION_4(EM_FUNC_SIG_VIIII, void *, glMapBufferRange, GLenum, GLintptr, GLsizeiptr, GLbitfield);
 ASYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glFlushMappedBufferRange, GLenum, GLintptr, GLsizeiptr);
+#endif
 ASYNC_GL_FUNCTION_1(EM_FUNC_SIG_VI, void, glBindVertexArray, GLuint);
 VOID_SYNC_GL_FUNCTION_2(EM_FUNC_SIG_VII, void, glDeleteVertexArrays, GLsizei, const GLuint *);
 VOID_SYNC_GL_FUNCTION_2(EM_FUNC_SIG_VII, void, glGenVertexArrays, GLsizei, GLuint *);
@@ -81,8 +85,20 @@ ASYNC_GL_FUNCTION_5(EM_FUNC_SIG_VIIIII, void, glDrawElementsInstanced, GLenum, G
 RET_SYNC_GL_FUNCTION_2(EM_FUNC_SIG_III, GLsync, glFenceSync, GLenum, GLbitfield);
 RET_SYNC_GL_FUNCTION_1(EM_FUNC_SIG_II, GLboolean, glIsSync, GLsync);
 ASYNC_GL_FUNCTION_1(EM_FUNC_SIG_VI, void, glDeleteSync, GLsync);
-RET_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_IIII, GLenum, glClientWaitSync, GLsync, GLbitfield, GLuint64); // XXX TODO: 64-bit integer proxying, this is not right, proxying as 32-bit
-VOID_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glWaitSync, GLsync, GLbitfield, GLuint64); // XXX TODO: 64-bit integer proxying, this is not right, proxying as 32-bit
+GLenum glClientWaitSync(GLsync p0, GLbitfield p1, GLuint64 p2) {
+	GL_FUNCTION_TRACE(glClientWaitSync);
+	if (pthread_getspecific(currentThreadOwnsItsWebGLContext))
+		return emscripten_glClientWaitSync(p0, p1, p2 & 0xFFFFFFFF, (p2 >> 32) & 0xFFFFFFFF);
+	else
+		return (GLenum)emscripten_sync_run_in_main_runtime_thread(EM_FUNC_SIG_IIIII, &emscripten_glClientWaitSync, p0, p1, p2 & 0xFFFFFFFF, (p2 >> 32) & 0xFFFFFFFF);
+}
+void glWaitSync(GLsync p0, GLbitfield p1, GLuint64 p2) {
+	GL_FUNCTION_TRACE(glWaitSync);
+	if (pthread_getspecific(currentThreadOwnsItsWebGLContext))
+		emscripten_glWaitSync(p0, p1, p2 & 0xFFFFFFFF, (p2 >> 32) & 0xFFFFFFFF);
+	else
+		emscripten_sync_run_in_main_runtime_thread(EM_FUNC_SIG_VIIII, &emscripten_glWaitSync, p0, p1, p2 & 0xFFFFFFFF, (p2 >> 32) & 0xFFFFFFFF);
+}
 VOID_SYNC_GL_FUNCTION_2(EM_FUNC_SIG_VII, void, glGetInteger64v, GLenum, GLint64 *);
 VOID_SYNC_GL_FUNCTION_5(EM_FUNC_SIG_VIIIII, void, glGetSynciv, GLsync, GLenum, GLsizei, GLsizei *, GLint *);
 VOID_SYNC_GL_FUNCTION_3(EM_FUNC_SIG_VIII, void, glGetInteger64i_v, GLenum, GLuint, GLint64 *);
@@ -135,6 +151,31 @@ GL_APICALL GLboolean GL_APIENTRY glIsVertexArrayOES(GLuint array) { return glIsV
 GL_APICALL void GL_APIENTRY glDrawBuffersEXT(GLsizei n, const GLenum *bufs) { glDrawBuffers(n, bufs); }
 GL_APICALL void GL_APIENTRY glDrawBuffersWEBGL(GLsizei n, const GLenum *bufs) { glDrawBuffers(n, bufs); }
 
+// Returns a function pointer to the given WebGL 2 extension function, when queried without
+// a GL extension suffix such as "EXT", "OES", or "ANGLE". This function is used by
+// emscripten_GetProcAddress() to implement legacy GL emulation semantics for portability.
+void *_webgl2_match_ext_proc_address_without_suffix(const char *name)
+{
+	RETURN_FN_WITH_SUFFIX(glVertexAttribDivisor, EXT);
+	RETURN_FN_WITH_SUFFIX(glVertexAttribDivisor, ARB);
+	RETURN_FN_WITH_SUFFIX(glVertexAttribDivisor, ANGLE);
+	RETURN_FN_WITH_SUFFIX(glDrawArraysInstanced, EXT);
+	RETURN_FN_WITH_SUFFIX(glDrawArraysInstanced, ARB);
+	RETURN_FN_WITH_SUFFIX(glDrawArraysInstanced, ANGLE);
+	RETURN_FN_WITH_SUFFIX(glDrawElementsInstanced, NV);
+	RETURN_FN_WITH_SUFFIX(glDrawElementsInstanced, EXT);
+	RETURN_FN_WITH_SUFFIX(glDrawElementsInstanced, ARB);
+	RETURN_FN_WITH_SUFFIX(glDrawElementsInstanced, ANGLE);
+	RETURN_FN_WITH_SUFFIX(glBindVertexArray, OES);
+	RETURN_FN_WITH_SUFFIX(glDeleteVertexArrays, OES);
+	RETURN_FN_WITH_SUFFIX(glGenVertexArrays, OES);
+	RETURN_FN_WITH_SUFFIX(glIsVertexArray, OES);
+	RETURN_FN_WITH_SUFFIX(glDrawBuffers, EXT);
+	RETURN_FN_WITH_SUFFIX(glDrawBuffers, WEBGL);
+
+	return 0;
+}
+
 void *emscripten_webgl2_get_proc_address(const char *name)
 {
 	RETURN_FN(glReadBuffer);
@@ -151,8 +192,10 @@ void *emscripten_webgl2_get_proc_address(const char *name)
 	RETURN_FN(glEndQuery);
 	RETURN_FN(glGetQueryiv);
 	RETURN_FN(glGetQueryObjectuiv);
+#ifdef __EMSCRIPTEN_FULL_ES3__
 	RETURN_FN(glUnmapBuffer);
 	RETURN_FN(glGetBufferPointerv);
+#endif
 	RETURN_FN(glDrawBuffers);
 	RETURN_FN(glUniformMatrix2x3fv);
 	RETURN_FN(glUniformMatrix3x2fv);
@@ -163,8 +206,10 @@ void *emscripten_webgl2_get_proc_address(const char *name)
 	RETURN_FN(glBlitFramebuffer);
 	RETURN_FN(glRenderbufferStorageMultisample);
 	RETURN_FN(glFramebufferTextureLayer);
+#ifdef __EMSCRIPTEN_FULL_ES3__
 	RETURN_FN(glMapBufferRange);
 	RETURN_FN(glFlushMappedBufferRange);
+#endif
 	RETURN_FN(glBindVertexArray);
 	RETURN_FN(glDeleteVertexArrays);
 	RETURN_FN(glGenVertexArrays);

@@ -51,12 +51,14 @@ function preprocess(text, filenameHint) {
           var truthy = !!eval(after);
           showStack.push(truthy);
         } else if (line.indexOf('#include') === 0) {
-          var filename = line.substr(line.indexOf(' ')+1);
-          if (filename.indexOf('"') === 0) {
-            filename = filename.substr(1, filename.length - 2);
+          if (showStack.indexOf(false) === -1) {
+            var filename = line.substr(line.indexOf(' ')+1);
+            if (filename.indexOf('"') === 0) {
+              filename = filename.substr(1, filename.length - 2);
+            }
+            var included = read(filename);
+            ret += '\n' + preprocess(included, filename) + '\n';
           }
-          var included = read(filename);
-          ret += '\n' + preprocess(included, filename) + '\n';
         } else if (line.indexOf('#else') === 0) {
           assert(showStack.length > 0);
           showStack.push(!showStack.pop());
@@ -1047,12 +1049,18 @@ function makeHEAPView(which, start, end) {
   return 'HEAP' + which + '.subarray((' + start + ')' + mod + ',(' + end + ')' + mod + ')';
 }
 
-function makeDynCall(sig) {
+// When dynamically linking, some things like dynCalls may not exist in one module and
+// be provided by a linked module, so they must be accessed indirectly using Module
+function exportedAsmFunc(func) {
   if (!MAIN_MODULE && !SIDE_MODULE) {
-    return 'dynCall_' + sig;
+    return func;
   } else {
-    return "Module['dynCall_" + sig + "']";
+    return "Module['" + func + "']";
   }
+}
+
+function makeDynCall(sig) {
+  return exportedAsmFunc('dynCall_' + sig);
 }
 
 var TWO_TWENTY = Math.pow(2, 20);
@@ -1312,11 +1320,13 @@ function makeStructuralReturn(values, inAsm) {
 }
 
 function makeThrow(what) {
-  if (ASSERTIONS) {
-    return 'throw ' + what + (DISABLE_EXCEPTION_CATCHING == 1 ? ' + " - Exception catching is disabled, this exception cannot be caught. Compile with -s DISABLE_EXCEPTION_CATCHING=0 or DISABLE_EXCEPTION_CATCHING=2 to catch."' : '') + ';';
-  } else {
-  return 'throw ' + what + ';';
+  if (ASSERTIONS && DISABLE_EXCEPTION_CATCHING == 1) {
+    what += ' + " - Exception catching is disabled, this exception cannot be caught. Compile with -s DISABLE_EXCEPTION_CATCHING=0 or DISABLE_EXCEPTION_CATCHING=2 to catch."';
+    if (MAIN_MODULE) {
+      what += ' + " (note: in dynamic linking, if a side module wants exceptions, the main module must be built with that support)"';
+    }
   }
+  return 'throw ' + what + ';';
 }
 
 function makeSignOp(value, type, op, force, ignore) {
@@ -1511,37 +1521,6 @@ function addAtExit(code) {
   }
 }
 
-// Generates access to module exports variable in pthreads worker.js. Depending on whether main code is built with MODULARIZE
-// or not, asm module exports need to either be accessed via a local exports object obtained from instantiating the module (in src/worker.js), or via
-// the global Module exports object.
-function makeAsmExportAccessInPthread(variable) {
-  if (MODULARIZE) {
-    return "Module['" + variable + "']"; // 'Module' is defined in worker.js local scope, so not EXPORT_NAME in this case.
-  } else {
-    return EXPORT_NAME + "['" + variable + "']";
-  }
-}
-
-// Generates access to a JS global scope variable in pthreads worker.js. In MODULARIZE mode the JS scope is not directly accessible, so all the relevant variables
-// are exported via Module. In non-MODULARIZE mode, we can directly access the variables in global scope.
-function makeAsmGlobalAccessInPthread(variable) {
-  if (MODULARIZE) {
-    return "Module['" + variable + "']"; // 'Module' is defined in worker.js local scope, so not EXPORT_NAME in this case.
-  } else {
-    return variable;
-  }
-}
-
-// Generates access to both global scope variable and exported Module variable, e.g. "Module['foo'] = foo" or just plain "foo" depending on if we are MODULARIZEing.
-// Used the be able to initialize both variables at the same time in scenarios where a variable exists in both global scope and in Module.
-function makeAsmExportAndGlobalAssignTargetInPthread(variable) {
-  if (MODULARIZE) {
-    return "Module['" + variable + "'] = " + variable; // 'Module' is defined in worker.js local scope, so not EXPORT_NAME in this case.
-  } else {
-    return variable;
-  }
-}
-
 // Some things, like the dynamic and stack bases, will be computed later and
 // applied. Return them as {{{ STR }}} for that replacing later.
 
@@ -1551,6 +1530,13 @@ function getQuoted(str) {
 
 function makeRetainedCompilerSettings() {
   var blacklist = set('STRUCT_INFO');
+  if (STRICT) {
+    for (var i in LEGACY_SETTINGS) {
+      var name = LEGACY_SETTINGS[i][0];
+      blacklist[name] = 0;
+    }
+  }
+
   var ret = {};
   for (var x in this) {
     try {
@@ -1579,8 +1565,69 @@ function modifyFunction(text, func) {
   var args = match[2];
   var rest = text.substr(match[0].length);
   var bodyStart = rest.indexOf('{');
-  assert(bodyStart > 0);
+  assert(bodyStart >= 0);
   var bodyEnd = rest.lastIndexOf('}');
   assert(bodyEnd > 0);
   return func(name, args, rest.substring(bodyStart + 1, bodyEnd));
+}
+
+function runOnMainThread(text) {
+  if (USE_PTHREADS) {
+    return 'if (!ENVIRONMENT_IS_PTHREAD) { ' + text + ' }';
+  } else {
+    return text;
+  }
+}
+
+function expectToReceiveOnModule(name) {
+  return name in INCOMING_MODULE_JS_API;
+}
+
+function makeRemovedModuleAPIAssert(moduleName, localName) {
+  if (!ASSERTIONS) return '';
+  if (!localName) localName = moduleName;
+  return "if (!Object.getOwnPropertyDescriptor(Module, '" + moduleName + "')) Object.defineProperty(Module, '" + moduleName + "', { configurable: true, get: function() { abort('Module." + moduleName + " has been replaced with plain " + localName + "') } });";
+}
+
+// Make code to receive a value on the incoming Module object.
+function makeModuleReceive(localName, moduleName) {
+  if (!moduleName) moduleName = localName;
+  var ret = '';
+  if (expectToReceiveOnModule(moduleName)) {
+    // Usually the local we use is the same as the Module property name,
+    // but sometimes they must differ.
+    ret = "if (Module['" + moduleName + "']) " + localName + " = Module['" + moduleName + "'];";
+  }
+  ret += makeRemovedModuleAPIAssert(moduleName, localName);
+  return ret;
+}
+
+function makeModuleReceiveWithVar(localName, moduleName, defaultValue, noAssert) {
+  if (!moduleName) moduleName = localName;
+  var ret = 'var ' + localName;
+  if (!expectToReceiveOnModule(moduleName)) {
+    if (defaultValue) {
+      ret += ' = ' + defaultValue;
+    }
+    ret += ';';
+  } else {
+    if (defaultValue) {
+      ret += " = Module['" + moduleName + "'] || " + defaultValue + ";";
+    } else {
+      ret += ';' +
+             makeModuleReceive(localName, moduleName);
+      return ret;
+    }
+  }
+  if (!noAssert) {
+    ret += makeRemovedModuleAPIAssert(moduleName, localName);
+  }
+  return ret;
+}
+
+function makeRemovedFSAssert(fsName) {
+  if (!ASSERTIONS) return;
+  var lower = fsName.toLowerCase();
+  if (SYSTEM_JS_LIBRARIES.indexOf('library_' + lower + '.js') >= 0) return '';
+  return "var " + fsName + " = '" + fsName + " is no longer included by default; build with -l" + lower + ".js';";
 }

@@ -7,13 +7,14 @@ import os
 import shutil
 
 VERSION = '1.0.6'
+HASH = '00ace5438cfa0c577e5f578d8a808613187eff5217c35164ffe044fbafdfec9e98f4192c02a7d67e01e5a5ccced630583ad1003c37697219b0f147343a3fdd12'
 
 
 def get(ports, settings, shared):
   if settings.USE_BZIP2 != 1:
     return []
 
-  ports.fetch_project('bzip2', 'https://downloads.sourceforge.net/project/bzip2/bzip2-1.0.6.tar.gz', 'bzip2-1.0.6')
+  ports.fetch_project('bzip2', 'https://sourceware.org/pub/bzip2/bzip2-1.0.6.tar.gz', 'bzip2-1.0.6', sha512hash=HASH)
 
   def create():
     ports.clear_project_build('bzip2')
@@ -36,12 +37,13 @@ def get(ports, settings, shared):
     for src in srcs:
       o = os.path.join(ports.get_build_dir(), 'bzip2', src + '.o')
       shared.safe_ensure_dirs(os.path.dirname(o))
-      commands.append([shared.PYTHON, shared.EMCC, os.path.join(dest_path, src), '-O2', '-o', o, '-I' + dest_path, '-w', ])
+      commands.append([shared.PYTHON, shared.EMCC, '-c', os.path.join(dest_path, src), '-O2', '-o', o, '-I' + dest_path, '-w', ])
       o_s.append(o)
     ports.run_commands(commands)
 
     final = os.path.join(ports.get_build_dir(), 'bzip2', 'libbz2.a')
     ports.create_lib(final, o_s)
+    ports.install_headers(source_path)
     return final
 
   return [shared.Cache.get('libbz2.a', create, what='port')]
@@ -54,7 +56,6 @@ def clear(ports, shared):
 def process_args(ports, args, settings, shared):
   if settings.USE_BZIP2 == 1:
     get(ports, settings, shared)
-    args += ['-Xclang', '-isystem' + os.path.join(shared.Cache.get_path('ports-builds'), 'bzip2')]
   return args
 
 

@@ -79,8 +79,13 @@ var LibraryPThreadStub = {
     {{{ makeSetValue('stacksize', '0', 'TOTAL_STACK', 'i32') }}};
     return 0;
   },
+  pthread_attr_getdetachstate: function(attr, detachstate) {
+    /* int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate); */
+    return 0;
+  },
 
   pthread_setcancelstate: function() { return 0; },
+  pthread_setcanceltype: function() { return 0; },
 
   pthread_cleanup_push: function(routine, arg) {
     __ATEXIT__.push(function() { {{{ makeDynCall('vi') }}}(routine, arg) })
@@ -99,7 +104,16 @@ var LibraryPThreadStub = {
   _pthread_cleanup_pop__sig: 'v',
   _pthread_cleanup_pop: 'pthread_cleanup_pop',
 
-  pthread_sigmask: function() { return 0; },
+  // pthread_sigmask - examine and change mask of blocked signals
+  pthread_sigmask: function(how, set, oldset) {
+    err('pthread_sigmask() is not supported: this is a no-op.');
+    return 0;
+  },
+
+  pthread_atfork: function(prepare, parent, child) {
+    err('fork() is not supported: pthread_atfork is a no-op.');
+    return 0;
+  },
 
   pthread_rwlock_init: function() { return 0; },
   pthread_rwlock_destroy: function() { return 0; },
@@ -172,14 +186,14 @@ var LibraryPThreadStub = {
   nanosleep: function(rqtp, rmtp) {
     // int nanosleep(const struct timespec  *rqtp, struct timespec *rmtp);
     if (rqtp === 0) {
-        ___setErrNo({{{ cDefine('EINVAL') }}});
-        return -1;
+      ___setErrNo({{{ cDefine('EINVAL') }}});
+      return -1;
     }
     var seconds = {{{ makeGetValue('rqtp', C_STRUCTS.timespec.tv_sec, 'i32') }}};
     var nanoseconds = {{{ makeGetValue('rqtp', C_STRUCTS.timespec.tv_nsec, 'i32') }}};
     if (nanoseconds < 0 || nanoseconds > 999999999 || seconds < 0) {
-        ___setErrNo({{{ cDefine('EINVAL') }}});
-        return -1;
+      ___setErrNo({{{ cDefine('EINVAL') }}});
+      return -1;
     }
     if (rmtp !== 0) {
       {{{ makeSetValue('rmtp', C_STRUCTS.timespec.tv_sec, '0', 'i32') }}};

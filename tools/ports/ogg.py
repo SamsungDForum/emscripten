@@ -8,13 +8,14 @@ import os
 import shutil
 
 TAG = 'version_1'
+HASH = '929e8d6003c06ae09593021b83323c8f1f54532b67b8ba189f4aedce52c25dc182bac474de5392c46ad5b0dea5a24928e4ede1492d52f4dd5cd58eea9be4dba7'
 
 
 def get(ports, settings, shared):
   if settings.USE_OGG != 1:
     return []
 
-  ports.fetch_project('ogg', 'https://github.com/emscripten-ports/ogg/archive/' + TAG + '.zip', 'Ogg-' + TAG)
+  ports.fetch_project('ogg', 'https://github.com/emscripten-ports/ogg/archive/' + TAG + '.zip', 'Ogg-' + TAG, sha512hash=HASH)
   libname = ports.get_lib_name('libogg')
 
   def create():
@@ -29,8 +30,12 @@ def get(ports, settings, shared):
 
     open(os.path.join(dest_path, 'include', 'ogg', 'config_types.h'), 'w').write(config_types_h)
 
+    header_dir = os.path.join(ports.get_include_dir(), 'ogg')
+    shutil.rmtree(header_dir, ignore_errors=True)
+    shutil.copytree(os.path.join(dest_path, 'include', 'ogg'), header_dir)
+
     final = os.path.join(dest_path, libname)
-    ports.build_port(os.path.join(dest_path, 'src'), final, [os.path.join(dest_path, 'include')])
+    ports.build_port(os.path.join(dest_path, 'src'), final)
     return final
 
   return [shared.Cache.get(libname, create)]
@@ -43,7 +48,6 @@ def clear(ports, shared):
 def process_args(ports, args, settings, shared):
   if settings.USE_OGG == 1:
     get(ports, settings, shared)
-    args += ['-Xclang', '-isystem' + os.path.join(shared.Cache.get_path('ports-builds'), 'ogg', 'include')]
   return args
 
 

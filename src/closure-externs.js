@@ -49,6 +49,18 @@ Math.clz32 = function() {};
 Math.trunc = function() {};
 
 /**
+ * Atomics
+ */
+
+var Atomics = {};
+Atomics.compareExchange = function() {};
+Atomics.exchange = function() {};
+Atomics.wait = function() {};
+Atomics.notify = function() {};
+Atomics.load = function() {};
+Atomics.store = function() {};
+
+/**
  * SIMD.js support (not in upstream closure yet).
  */
 var SIMD;
@@ -763,6 +775,7 @@ SIMD.Bool64x2.fromFloat64x2 = function() {};
 
 /**
  * @const
+ * @suppress {duplicate}
  */
 var WebAssembly = {};
 /**
@@ -907,12 +920,18 @@ var worker;
  * @param {Object} message
  */
 var onmessage = function(message) {};
+var onmessageerror = function() {};
 
 /**
  * @param {string} type
  * @param {!Function} listener
  */
 var addEventListener = function (type, listener) {};
+
+/**
+ * @type {Function}
+ */
+var close;
 
 // Fetch.js/Fetch Worker
 
@@ -942,3 +961,14 @@ var wakaEnv;
  * @suppress {undefinedVars}
  */
 var wakaBuffer;
+
+
+// Browser externs on global window object.
+var pageXOffset;
+var pageYOffset;
+var innerWidth;
+var innerHeight;
+var outerWidth;
+var outerHeight;
+var event;
+var devicePixelRatio;

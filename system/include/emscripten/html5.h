@@ -130,7 +130,6 @@ extern EMSCRIPTEN_RESULT emscripten_set_keydown_callback_on_thread(const char *t
 extern EMSCRIPTEN_RESULT emscripten_set_keyup_callback_on_thread(const char *target, void *userData, EM_BOOL useCapture, em_key_callback_func callback, pthread_t targetThread);
 
 typedef struct EmscriptenMouseEvent {
-  double timestamp;
   long screenX;
   long screenY;
   long clientX;
@@ -210,7 +209,6 @@ extern EMSCRIPTEN_RESULT emscripten_set_focusin_callback_on_thread(const char *t
 extern EMSCRIPTEN_RESULT emscripten_set_focusout_callback_on_thread(const char *target, void *userData, EM_BOOL useCapture, em_focus_callback_func callback, pthread_t targetThread);
 
 typedef struct EmscriptenDeviceOrientationEvent {
-  double timestamp;
   double alpha;
   double beta;
   double gamma;
@@ -223,8 +221,11 @@ extern EMSCRIPTEN_RESULT emscripten_set_deviceorientation_callback_on_thread(voi
 
 extern EMSCRIPTEN_RESULT emscripten_get_deviceorientation_status(EmscriptenDeviceOrientationEvent *orientationState);
 
+#define EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ACCELERATION                   0x01
+#define EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ACCELERATION_INCLUDING_GRAVITY 0x02
+#define EMSCRIPTEN_DEVICE_MOTION_EVENT_SUPPORTS_ROTATION_RATE                  0x04
+
 typedef struct EmscriptenDeviceMotionEvent {
-  double timestamp;
   double accelerationX;
   double accelerationY;
   double accelerationZ;
@@ -234,6 +235,7 @@ typedef struct EmscriptenDeviceMotionEvent {
   double rotationRateAlpha;
   double rotationRateBeta;
   double rotationRateGamma;
+  int supportedFields;
 } EmscriptenDeviceMotionEvent;
 
 
@@ -571,6 +573,8 @@ extern void emscripten_console_error(const char *utf8String);
 
 extern void emscripten_throw_number(double number);
 extern void emscripten_throw_string(const char *utf8String);
+
+extern void emscripten_unwind_to_js_event_loop(void) __attribute__((noreturn));
 
 #ifdef __cplusplus
 } // ~extern "C"

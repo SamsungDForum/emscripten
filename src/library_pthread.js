@@ -968,8 +968,8 @@ var LibraryPThread = {
       // the entire application.
       process.exit(status);
     }
-    throw 'unwind';
 #endif
+    throw 'unwind';
   },
 
   _pthread_ptr: 0,

@@ -1969,6 +1969,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glGetUniform*v', 'program');
     GL.validateGLObjectID(GL.uniforms, location, 'glGetUniform*v', 'location');
 #endif
+    if (!GL.programs[program] || !GL.uniforms[location]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     var data = GLctx.getUniform(GL.programs[program], GL.uniforms[location]);
     if (typeof data == 'number' || typeof data == 'boolean') {
       switch (type) {
@@ -2004,6 +2009,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.programs, program, 'glGetUniformLocation', 'program');
 #endif
+    if (!GL.programs[program] || !GL.programInfos[program]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return -1;
+    }
     name = UTF8ToString(name);
 
     var arrayIndex = 0;
@@ -2100,6 +2109,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glGetActiveUniform', 'program');
 #endif
     program = GL.programs[program];
+    if (!program) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     var info = GLctx.getActiveUniform(program, index);
     if (!info) return; // If an error occurs, nothing will be written to length, size, type and name.
 
@@ -2114,6 +2128,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform1f', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform1f(GL.uniforms[location], v0);
   },
 
@@ -2122,6 +2140,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform2f', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform2f(GL.uniforms[location], v0, v1);
   },
 
@@ -2130,6 +2152,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform3f', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform3f(GL.uniforms[location], v0, v1, v2);
   },
 
@@ -2138,6 +2164,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform4f', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform4f(GL.uniforms[location], v0, v1, v2, v3);
   },
 
@@ -2146,6 +2176,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform1i', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform1i(GL.uniforms[location], v0);
   },
 
@@ -2154,6 +2188,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform2i', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform2i(GL.uniforms[location], v0, v1);
   },
 
@@ -2162,6 +2200,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform3i', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform3i(GL.uniforms[location], v0, v1, v2);
   },
 
@@ -2170,6 +2212,10 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform4i', 'location');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
     GLctx.uniform4i(GL.uniforms[location], v0, v1, v2, v3);
   },
 
@@ -2179,6 +2225,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform1iv', 'location');
     assert((value & 3) == 0, 'Pointer to integer data passed to glUniform1iv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2211,6 +2261,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform2iv', 'location');
     assert((value & 3) == 0, 'Pointer to integer data passed to glUniform2iv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2244,6 +2298,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform3iv', 'location');
     assert((value & 3) == 0, 'Pointer to integer data passed to glUniform3iv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2278,6 +2336,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform4iv', 'location');
     assert((value & 3) == 0, 'Pointer to integer data passed to glUniform4iv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2313,6 +2375,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform1fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniform1fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2345,6 +2411,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform2fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniform2fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2378,6 +2448,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform3fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniform3fv must be aligned to four bytes!' + value);
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2412,6 +2486,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniform4fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniform4fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2447,6 +2525,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniformMatrix2fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniformMatrix2fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2482,6 +2564,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniformMatrix3fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniformMatrix3fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2522,6 +2608,10 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.uniforms, location, 'glUniformMatrix4fv', 'location');
     assert((value & 3) == 0, 'Pointer to float data passed to glUniformMatrix4fv must be aligned to four bytes!');
 #endif
+    if (!GL.uniforms[location]) {
+      GL.recordError(0x0502 /* GL_INVALID_OPERATION */);
+      return;
+    }
 
 #if USE_WEBGL2
     if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
@@ -2648,6 +2738,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glGetActiveAttrib', 'program');
 #endif
     program = GL.programs[program];
+    if (!program) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     var info = GLctx.getActiveAttrib(program, index);
     if (!info) return; // If an error occurs, nothing will be written to length, size and type and name.
 
@@ -2764,6 +2859,11 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.shaders, shader, 'glCompileShader', 'shader');
 #endif
+    if (!GL.shaders[shader]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.compileShader(GL.shaders[shader]);
 #if GL_DEBUG
     var log = (GLctx.getShaderInfoLog(GL.shaders[shader]) || '').trim();
@@ -2916,6 +3016,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glAttachShader', 'program');
     GL.validateGLObjectID(GL.shaders, shader, 'glAttachShader', 'shader');
 #endif
+    if (!GL.programs[program] || !GL.shaders[shader]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.attachShader(GL.programs[program],
                             GL.shaders[shader]);
   },
@@ -2926,6 +3031,11 @@ var LibraryGL = {
     GL.validateGLObjectID(GL.programs, program, 'glDetachShader', 'program');
     GL.validateGLObjectID(GL.shaders, shader, 'glDetachShader', 'shader');
 #endif
+    if (!GL.programs[program] || !GL.shaders[shader]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.detachShader(GL.programs[program],
                             GL.shaders[shader]);
   },
@@ -2943,6 +3053,11 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.programs, program, 'glLinkProgram', 'program');
 #endif
+    if (!GL.programs[program]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.linkProgram(GL.programs[program]);
 #if GL_DEBUG
     var log = (GLctx.getProgramInfoLog(GL.programs[program]) || '').trim();
@@ -2977,6 +3092,11 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.programs, program, 'glValidateProgram', 'program');
 #endif
+    if (!GL.programs[program]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.validateProgram(GL.programs[program]);
   },
 
@@ -2992,6 +3112,11 @@ var LibraryGL = {
 #if GL_ASSERTIONS
     GL.validateGLObjectID(GL.programs, program, 'glBindAttribLocation', 'program');
 #endif
+    if (!GL.programs[program]) {
+      // avoid throwing TypeError exception form WebGL
+      GL.recordError(0x0501 /* GL_INVALID_VALUE */);
+      return;
+    }
     GLctx.bindAttribLocation(GL.programs[program], index, UTF8ToString(name));
   },
 

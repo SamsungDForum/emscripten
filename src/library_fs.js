@@ -438,6 +438,14 @@ mergeInto(LibraryManager.library, {
     closeStream: function(fd) {
       FS.streams[fd] = null;
     },
+    moveStream: function(fd_src, fd_dst) {
+      if (fd_src === fd_dst) {
+        return;
+      }
+      FS.streams[fd_dst] = FS.streams[fd_src];
+      FS.streams[fd_src] = null;
+      FS.streams[fd_dst].fd = fd_dst;
+    },
 
     //
     // devices

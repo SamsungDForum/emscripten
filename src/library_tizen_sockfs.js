@@ -11,6 +11,7 @@ mergeInto(LibraryManager.library, {
   $SOCKFS__deps: ['$FS', '$ERRNO_CODES'], // TODO: avoid ERRNO_CODES
   $SOCKFS: {
     mount: function(mount) {
+      SOCKFS.initSocketMap();
       return FS.createNode(null, '/', {{{ cDefine('S_IFDIR') }}} | 511 /* 0777 */, 0);
     },
     createSocket: function(family, type, protocol) {
@@ -18,7 +19,6 @@ mergeInto(LibraryManager.library, {
 
       const familyName = SOCKFS.intToFamily(family);
       if (familyName === null || familyName === "af_unspec") {
-        SOCKFS.doLog("SOCKFS socket: not supported domain type");
         throw new FS.ErrnoError({{{ cDefine('EAFNOSUPPORT') }}});
       }
 
@@ -46,11 +46,9 @@ mergeInto(LibraryManager.library, {
         if (sockType) {
           socket = tizentvwasm.SocketsManager.create(familyName, sockType, option);
         } else {
-          SOCKFS.doLog("SocketSync js_socket invalid type: " + type);
           throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
         }
       } catch (err) {
-        SOCKFS.doLog(`SOCKFS socket error creating socket - errno: [${err}]`);
         throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       }
 
@@ -81,21 +79,240 @@ mergeInto(LibraryManager.library, {
       // relationship with a stream)
       sock.stream = stream;
 
+      const id = __createSocketOnRenderThread(family, type, protocol, socket);
+      FS.moveStream(sock.stream.fd, id);
+
       return sock;
     },
+    socketMapPtr: {{{ makeStaticAlloc(4096) }}}, // 4096 because this is equal FS.MAX_OPEN_FDS
+    initSocketMap: function() {
+      const ptr = SOCKFS.socketMapPtr >> 2;
+      const count = FS.MAX_OPEN_FDS >> 2;
+      for (let i = 0; i < count; i++) {
+        HEAP32[ptr + i] = 0;
+      }
+    },
+    setSocketFdInMap: function(fd) {
+      if (fd < 0 || fd >= FS.MAX_OPEN_FDS) {
+        return;
+      }
+      HEAP8[SOCKFS.socketMapPtr + fd] = 1;
+    },
+    clearSocketFdInMap: function(fd) {
+      if (fd < 0 || fd >= FS.MAX_OPEN_FDS) {
+        return;
+      }
+      HEAP8[SOCKFS.socketMapPtr + fd] = 0;
+    },
+    createSocketOnCurrentThread: function(family, type, protocol, socket) {
+      var sock = {
+        family: family,
+        type: type,
+        protocol: protocol,
+        sock_fd: socket,
+        sock_ops: SOCKFS.webengine_sock_ops
+      };
+      // create the filesystem node to store the socket structure
+      var name = SOCKFS.nextname();
+      var node = FS.createNode(SOCKFS.root, name, {{{ cDefine('S_IFSOCK') }}}, 0);
+      node.sock = sock;
+      // and the wrapping stream that enables library functions such
+      // as read and write to indirectly interact with the socket
+      var stream = FS.createStream({
+        path: name,
+        node: node,
+        flags: FS.modeStringToFlags('r+'),
+        seekable: false,
+        stream_ops: SOCKFS.stream_ops
+      });
+      sock.stream = stream;
+      return sock.stream.fd;
+    },
+    updateStream: function(fd) {
+      let stream = FS.getStream(fd);
+      if (!stream) {
+        const ptr = __cloneSocketFromRenderThread(fd);
+        const family = HEAP32[ptr >> 2];
+        const type = HEAP32[(ptr >> 2) + 1];
+        const protocol = HEAP32[(ptr >> 2) + 2];
+        const sock_fd = HEAP32[(ptr >> 2) + 3];
+        const tmp_fd = SOCKFS.createSocketOnCurrentThread(family, type, protocol, sock_fd);
+        FS.moveStream(tmp_fd, fd);
+        _free(ptr);
+        stream = FS.getStream(fd);
+        if (!stream) {
+          return null;
+        }
+      }
+      return stream;
+    },
     getSocket: function(fd) {
-      var stream = FS.getStream(fd);
+      if (!SOCKFS.hasSocket(fd)) {
+        return null;
+      }
+      const stream = SOCKFS.updateStream(fd);
       if (!stream || !FS.isSocket(stream.node.mode)) {
         return null;
       }
       return stream.node.sock;
     },
+    getStream: function(fd) {
+      return SOCKFS.updateStream(fd);
+    },
     hasSocket: function(fd) {
-      const stream = FS.getStream(fd);
-      if (!stream || !FS.isSocket(stream.node.mode)) {
+      if (fd < 0 || fd >= FS.MAX_OPEN_FD) {
         return false;
       }
-      return true;
+      return HEAP8[SOCKFS.socketMapPtr + fd] === 1;
+      const stream = FS.getStream(fd);
+    },
+    getErrorCode: function(sock_fd) {
+      const ErrorCodes = tizentvwasm.ErrorCodes;
+      const errorCodesMap = new Map([
+        [ ErrorCodes.EPERM, {{{ cDefine('EPERM') }}} ],
+        [ ErrorCodes.ENOENT, {{{ cDefine('ENOENT') }}} ],
+        [ ErrorCodes.ESRCH, {{{ cDefine('ESRCH') }}} ],
+        [ ErrorCodes.EINTR, {{{ cDefine('EINTR') }}} ],
+        [ ErrorCodes.EIO, {{{ cDefine('EIO') }}} ],
+        [ ErrorCodes.ENXIO, {{{ cDefine('ENXIO') }}} ],
+        [ ErrorCodes.E2BIG, {{{ cDefine('E2BIG') }}} ],
+        [ ErrorCodes.ENOEXEC, {{{ cDefine('ENOEXEC') }}} ],
+        [ ErrorCodes.EBADF, {{{ cDefine('EBADF') }}} ],
+        [ ErrorCodes.ECHILD, {{{ cDefine('ECHILD') }}} ],
+        [ ErrorCodes.EAGAIN, {{{ cDefine('EAGAIN') }}} ],
+        [ ErrorCodes.ENOMEM, {{{ cDefine('ENOMEM') }}} ],
+        [ ErrorCodes.EACCES, {{{ cDefine('EACCES') }}} ],
+        [ ErrorCodes.EFAULT, {{{ cDefine('EFAULT') }}} ],
+        [ ErrorCodes.ENOTBLK, {{{ cDefine('ENOTBLK') }}} ],
+        [ ErrorCodes.EBUSY, {{{ cDefine('EBUSY') }}} ],
+        [ ErrorCodes.EEXIST, {{{ cDefine('EEXIST') }}} ],
+        [ ErrorCodes.EXDEV, {{{ cDefine('EXDEV') }}} ],
+        [ ErrorCodes.ENODEV, {{{ cDefine('ENODEV') }}} ],
+        [ ErrorCodes.ENOTDIR, {{{ cDefine('ENOTDIR') }}} ],
+        [ ErrorCodes.EISDIR, {{{ cDefine('EISDIR') }}} ],
+        [ ErrorCodes.EINVAL, {{{ cDefine('EINVAL') }}} ],
+        [ ErrorCodes.ENFILE, {{{ cDefine('ENFILE') }}} ],
+        [ ErrorCodes.EMFILE, {{{ cDefine('EMFILE') }}} ],
+        [ ErrorCodes.ENOTTY, {{{ cDefine('ENOTTY') }}} ],
+        [ ErrorCodes.ETXTBSY, {{{ cDefine('ETXTBSY') }}} ],
+        [ ErrorCodes.EFBIG, {{{ cDefine('EFBIG') }}} ],
+        [ ErrorCodes.ENOSPC, {{{ cDefine('ENOSPC') }}} ],
+        [ ErrorCodes.ESPIPE, {{{ cDefine('ESPIPE') }}} ],
+        [ ErrorCodes.EROFS, {{{ cDefine('EROFS') }}} ],
+        [ ErrorCodes.EMLINK, {{{ cDefine('EMLINK') }}} ],
+        [ ErrorCodes.EPIPE, {{{ cDefine('EPIPE') }}} ],
+        [ ErrorCodes.EDOM, {{{ cDefine('EDOM') }}} ],
+        [ ErrorCodes.ERANGE, {{{ cDefine('ERANGE') }}} ],
+        [ ErrorCodes.EDEADLK, {{{ cDefine('EDEADLK') }}} ],
+        [ ErrorCodes.ENAMETOOLONG, {{{ cDefine('ENAMETOOLONG') }}} ],
+        [ ErrorCodes.ENOLCK, {{{ cDefine('ENOLCK') }}} ],
+        [ ErrorCodes.ENOSYS, {{{ cDefine('ENOSYS') }}} ],
+        [ ErrorCodes.ENOTEMPTY, {{{ cDefine('ENOTEMPTY') }}} ],
+        [ ErrorCodes.ELOOP, {{{ cDefine('ELOOP') }}} ],
+        [ ErrorCodes.EWOULDBLOCK, {{{ cDefine('EWOULDBLOCK') }}} ],
+        [ ErrorCodes.ENOMSG, {{{ cDefine('ENOMSG') }}} ],
+        [ ErrorCodes.EIDRM, {{{ cDefine('EIDRM') }}} ],
+        [ ErrorCodes.ECHRNG, {{{ cDefine('ECHRNG') }}} ],
+        [ ErrorCodes.EL2NSYNC, {{{ cDefine('EL2NSYNC') }}} ],
+        [ ErrorCodes.EL3HLT, {{{ cDefine('EL3HLT') }}} ],
+        [ ErrorCodes.EL3RST, {{{ cDefine('EL3RST') }}} ],
+        [ ErrorCodes.ELNRNG, {{{ cDefine('ELNRNG') }}} ],
+        [ ErrorCodes.EUNATCH, {{{ cDefine('EUNATCH') }}} ],
+        [ ErrorCodes.ENOCSI, {{{ cDefine('ENOCSI') }}} ],
+        [ ErrorCodes.EL2HLT, {{{ cDefine('EL2HLT') }}} ],
+        [ ErrorCodes.EBADE, {{{ cDefine('EBADE') }}} ],
+        [ ErrorCodes.EBADR, {{{ cDefine('EBADR') }}} ],
+        [ ErrorCodes.EXFULL, {{{ cDefine('EXFULL') }}} ],
+        [ ErrorCodes.ENOANO, {{{ cDefine('ENOANO') }}} ],
+        [ ErrorCodes.EBADRQC, {{{ cDefine('EBADRQC') }}} ],
+        [ ErrorCodes.EBADSLT, {{{ cDefine('EBADSLT') }}} ],
+        [ ErrorCodes.EDEADLOCK, {{{ cDefine('EDEADLOCK') }}} ],
+        [ ErrorCodes.EBFONT, {{{ cDefine('EBFONT') }}} ],
+        [ ErrorCodes.ENOSTR, {{{ cDefine('ENOSTR') }}} ],
+        [ ErrorCodes.ENODATA, {{{ cDefine('ENODATA') }}} ],
+        [ ErrorCodes.ETIME, {{{ cDefine('ETIME') }}} ],
+        [ ErrorCodes.ENOSR, {{{ cDefine('ENOSR') }}} ],
+        [ ErrorCodes.ENONET, {{{ cDefine('ENONET') }}} ],
+        [ ErrorCodes.ENOPKG, {{{ cDefine('ENOPKG') }}} ],
+        [ ErrorCodes.EREMOTE, {{{ cDefine('EREMOTE') }}} ],
+        [ ErrorCodes.ENOLINK, {{{ cDefine('ENOLINK') }}} ],
+        [ ErrorCodes.EADV, {{{ cDefine('EADV') }}} ],
+        [ ErrorCodes.ESRMNT, {{{ cDefine('ESRMNT') }}} ],
+        [ ErrorCodes.ECOMM, {{{ cDefine('ECOMM') }}} ],
+        [ ErrorCodes.EPROTO, {{{ cDefine('EPROTO') }}} ],
+        [ ErrorCodes.EMULTIHOP, {{{ cDefine('EMULTIHOP') }}} ],
+        [ ErrorCodes.EDOTDOT, {{{ cDefine('EDOTDOT') }}} ],
+        [ ErrorCodes.EBADMSG, {{{ cDefine('EBADMSG') }}} ],
+        [ ErrorCodes.EOVERFLOW, {{{ cDefine('EOVERFLOW') }}} ],
+        [ ErrorCodes.ENOTUNIQ, {{{ cDefine('ENOTUNIQ') }}} ],
+        [ ErrorCodes.EBADFD, {{{ cDefine('EBADFD') }}} ],
+        [ ErrorCodes.EREMCHG, {{{ cDefine('EREMCHG') }}} ],
+        [ ErrorCodes.ELIBACC, {{{ cDefine('ELIBACC') }}} ],
+        [ ErrorCodes.ELIBBAD, {{{ cDefine('ELIBBAD') }}} ],
+        [ ErrorCodes.ELIBSCN, {{{ cDefine('ELIBSCN') }}} ],
+        [ ErrorCodes.ELIBMAX, {{{ cDefine('ELIBMAX') }}} ],
+        [ ErrorCodes.ELIBEXEC, {{{ cDefine('ELIBEXEC') }}} ],
+        [ ErrorCodes.EILSEQ, {{{ cDefine('EILSEQ') }}} ],
+        [ ErrorCodes.ERESTART, {{{ cDefine('ERESTART') }}} ],
+        [ ErrorCodes.ESTRPIPE, {{{ cDefine('ESTRPIPE') }}} ],
+        [ ErrorCodes.EUSERS, {{{ cDefine('EUSERS') }}} ],
+        [ ErrorCodes.ENOTSOCK, {{{ cDefine('ENOTSOCK') }}} ],
+        [ ErrorCodes.EDESTADDRREQ, {{{ cDefine('EDESTADDRREQ') }}} ],
+        [ ErrorCodes.EMSGSIZE, {{{ cDefine('EMSGSIZE') }}} ],
+        [ ErrorCodes.EPROTOTYPE, {{{ cDefine('EPROTOTYPE') }}} ],
+        [ ErrorCodes.ENOPROTOOPT, {{{ cDefine('ENOPROTOOPT') }}} ],
+        [ ErrorCodes.EPROTONOSUPPORT, {{{ cDefine('EPROTONOSUPPORT') }}} ],
+        [ ErrorCodes.ESOCKTNOSUPPORT, {{{ cDefine('ESOCKTNOSUPPORT') }}} ],
+        [ ErrorCodes.EOPNOTSUPP, {{{ cDefine('EOPNOTSUPP') }}} ],
+        [ ErrorCodes.ENOTSUP, {{{ cDefine('ENOTSUP') }}} ],
+        [ ErrorCodes.EPFNOSUPPORT, {{{ cDefine('EPFNOSUPPORT') }}} ],
+        [ ErrorCodes.EAFNOSUPPORT, {{{ cDefine('EAFNOSUPPORT') }}} ],
+        [ ErrorCodes.EADDRINUSE, {{{ cDefine('EADDRINUSE') }}} ],
+        [ ErrorCodes.EADDRNOTAVAIL, {{{ cDefine('EADDRNOTAVAIL') }}} ],
+        [ ErrorCodes.ENETDOWN, {{{ cDefine('ENETDOWN') }}} ],
+        [ ErrorCodes.ENETUNREACH, {{{ cDefine('ENETUNREACH') }}} ],
+        [ ErrorCodes.ENETRESET, {{{ cDefine('ENETRESET') }}} ],
+        [ ErrorCodes.ECONNABORTED, {{{ cDefine('ECONNABORTED') }}} ],
+        [ ErrorCodes.ECONNRESET, {{{ cDefine('ECONNRESET') }}} ],
+        [ ErrorCodes.ENOBUFS, {{{ cDefine('ENOBUFS') }}} ],
+        [ ErrorCodes.EISCONN, {{{ cDefine('EISCONN') }}} ],
+        [ ErrorCodes.ENOTCONN, {{{ cDefine('ENOTCONN') }}} ],
+        [ ErrorCodes.ESHUTDOWN, {{{ cDefine('ESHUTDOWN') }}} ],
+        [ ErrorCodes.ETOOMANYREFS, {{{ cDefine('ETOOMANYREFS') }}} ],
+        [ ErrorCodes.ETIMEDOUT, {{{ cDefine('ETIMEDOUT') }}} ],
+        [ ErrorCodes.ECONNREFUSED, {{{ cDefine('ECONNREFUSED') }}} ],
+        [ ErrorCodes.EHOSTDOWN, {{{ cDefine('EHOSTDOWN') }}} ],
+        [ ErrorCodes.EHOSTUNREACH, {{{ cDefine('EHOSTUNREACH') }}} ],
+        [ ErrorCodes.EALREADY, {{{ cDefine('EALREADY') }}} ],
+        [ ErrorCodes.EINPROGRESS, {{{ cDefine('EINPROGRESS') }}} ],
+        [ ErrorCodes.ESTALE, {{{ cDefine('ESTALE') }}} ],
+        [ ErrorCodes.EUCLEAN, {{{ cDefine('EUCLEAN') }}} ],
+        [ ErrorCodes.ENOTNAM, {{{ cDefine('ENOTNAM') }}} ],
+        [ ErrorCodes.ENAVAIL, {{{ cDefine('ENAVAIL') }}} ],
+        [ ErrorCodes.EISNAM, {{{ cDefine('EISNAM') }}} ],
+        [ ErrorCodes.EREMOTEIO, {{{ cDefine('EREMOTEIO') }}} ],
+        [ ErrorCodes.EDQUOT, {{{ cDefine('EDQUOT') }}} ],
+        [ ErrorCodes.ENOMEDIUM, {{{ cDefine('ENOMEDIUM') }}} ],
+        [ ErrorCodes.EMEDIUMTYPE, {{{ cDefine('EMEDIUMTYPE') }}} ],
+        [ ErrorCodes.ECANCELED, {{{ cDefine('ECANCELED') }}} ],
+        [ ErrorCodes.ENOKEY, {{{ cDefine('ENOKEY') }}} ],
+        [ ErrorCodes.EKEYEXPIRED, {{{ cDefine('EKEYEXPIRED') }}} ],
+        [ ErrorCodes.EKEYREVOKED, {{{ cDefine('EKEYREVOKED') }}} ],
+        [ ErrorCodes.EKEYREJECTED, {{{ cDefine('EKEYREJECTED') }}} ],
+        [ ErrorCodes.EOWNERDEAD, {{{ cDefine('EOWNERDEAD') }}} ],
+        [ ErrorCodes.ENOTRECOVERABLE, {{{ cDefine('ENOTRECOVERABLE') }}} ],
+        [ ErrorCodes.ERFKILL, {{{ cDefine('ERFKILL') }}} ],
+        [ ErrorCodes.EHWPOISON, {{{ cDefine('EHWPOISON') }}} ]
+      ]);
+
+      const error = (typeof sock_fd == 'undefined' ?
+          tizentvwasm.SocketsManager.getErrorCode() :
+          tizentvwasm.SocketsManager.getErrorCode(sock_fd));
+      if (errorCodesMap.has(error)) {
+        return errorCodesMap.get(error);
+      } else {
+        return 0;
+      }
     },
     // node and stream ops are backend agnostic
     stream_ops: {
@@ -108,22 +325,28 @@ mergeInto(LibraryManager.library, {
         return sock.sock_ops.ioctl(sock, request, varargs);
       },
       read: function(stream, buffer, offset, length, position /* ignored */ ) {
-        var sock = stream.node.sock;
-        var msg = sock.sock_ops.recvmsg(sock, length);
-        if (!msg) {
-          // socket is closed
-          return 0;
+        const sock = stream.node.sock.sock_fd;
+        const data = HEAPU8.subarray(offset, offset + length);
+        try {
+          return tizentvwasm.SocketsManager.recv(sock, data, 0);
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
         }
-        buffer.set(msg.buffer, offset);
-        return msg.buffer.length;
       },
       write: function(stream, buffer, offset, length, position /* ignored */ ) {
-        var sock = stream.node.sock;
-        return sock.sock_ops.sendmsg(sock, buffer, offset, length);
+        var sock = stream.node.sock.sock_fd;
+        const data = HEAPU8.subarray(offset, offset + length);
+        try {
+          return tizentvwasm.SocketsManager.send(sock, data, 0);
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+        }
       },
       close: function(stream) {
         var sock = stream.node.sock;
+        const fd = stream.fd;
         sock.sock_ops.close(sock);
+        __closeSocketOnRenderThread(fd);
       }
     },
     nextname: function() {
@@ -141,154 +364,6 @@ mergeInto(LibraryManager.library, {
         FD_SET: 128,
         IPv4ADDR: 4,
         IPv6ADDR: 16,
-      },
-      getErrorCode: function(sock_fd) {
-        const ErrorCodes = tizentvwasm.ErrorCodes;
-        const errorCodesMap = new Map([
-          [ ErrorCodes.EPERM, {{{ cDefine('EPERM') }}} ],
-          [ ErrorCodes.ENOENT, {{{ cDefine('ENOENT') }}} ],
-          [ ErrorCodes.ESRCH, {{{ cDefine('ESRCH') }}} ],
-          [ ErrorCodes.EINTR, {{{ cDefine('EINTR') }}} ],
-          [ ErrorCodes.EIO, {{{ cDefine('EIO') }}} ],
-          [ ErrorCodes.ENXIO, {{{ cDefine('ENXIO') }}} ],
-          [ ErrorCodes.E2BIG, {{{ cDefine('E2BIG') }}} ],
-          [ ErrorCodes.ENOEXEC, {{{ cDefine('ENOEXEC') }}} ],
-          [ ErrorCodes.EBADF, {{{ cDefine('EBADF') }}} ],
-          [ ErrorCodes.ECHILD, {{{ cDefine('ECHILD') }}} ],
-          [ ErrorCodes.EAGAIN, {{{ cDefine('EAGAIN') }}} ],
-          [ ErrorCodes.ENOMEM, {{{ cDefine('ENOMEM') }}} ],
-          [ ErrorCodes.EACCES, {{{ cDefine('EACCES') }}} ],
-          [ ErrorCodes.EFAULT, {{{ cDefine('EFAULT') }}} ],
-          [ ErrorCodes.ENOTBLK, {{{ cDefine('ENOTBLK') }}} ],
-          [ ErrorCodes.EBUSY, {{{ cDefine('EBUSY') }}} ],
-          [ ErrorCodes.EEXIST, {{{ cDefine('EEXIST') }}} ],
-          [ ErrorCodes.EXDEV, {{{ cDefine('EXDEV') }}} ],
-          [ ErrorCodes.ENODEV, {{{ cDefine('ENODEV') }}} ],
-          [ ErrorCodes.ENOTDIR, {{{ cDefine('ENOTDIR') }}} ],
-          [ ErrorCodes.EISDIR, {{{ cDefine('EISDIR') }}} ],
-          [ ErrorCodes.EINVAL, {{{ cDefine('EINVAL') }}} ],
-          [ ErrorCodes.ENFILE, {{{ cDefine('ENFILE') }}} ],
-          [ ErrorCodes.EMFILE, {{{ cDefine('EMFILE') }}} ],
-          [ ErrorCodes.ENOTTY, {{{ cDefine('ENOTTY') }}} ],
-          [ ErrorCodes.ETXTBSY, {{{ cDefine('ETXTBSY') }}} ],
-          [ ErrorCodes.EFBIG, {{{ cDefine('EFBIG') }}} ],
-          [ ErrorCodes.ENOSPC, {{{ cDefine('ENOSPC') }}} ],
-          [ ErrorCodes.ESPIPE, {{{ cDefine('ESPIPE') }}} ],
-          [ ErrorCodes.EROFS, {{{ cDefine('EROFS') }}} ],
-          [ ErrorCodes.EMLINK, {{{ cDefine('EMLINK') }}} ],
-          [ ErrorCodes.EPIPE, {{{ cDefine('EPIPE') }}} ],
-          [ ErrorCodes.EDOM, {{{ cDefine('EDOM') }}} ],
-          [ ErrorCodes.ERANGE, {{{ cDefine('ERANGE') }}} ],
-          [ ErrorCodes.EDEADLK, {{{ cDefine('EDEADLK') }}} ],
-          [ ErrorCodes.ENAMETOOLONG, {{{ cDefine('ENAMETOOLONG') }}} ],
-          [ ErrorCodes.ENOLCK, {{{ cDefine('ENOLCK') }}} ],
-          [ ErrorCodes.ENOSYS, {{{ cDefine('ENOSYS') }}} ],
-          [ ErrorCodes.ENOTEMPTY, {{{ cDefine('ENOTEMPTY') }}} ],
-          [ ErrorCodes.ELOOP, {{{ cDefine('ELOOP') }}} ],
-          [ ErrorCodes.EWOULDBLOCK, {{{ cDefine('EWOULDBLOCK') }}} ],
-          [ ErrorCodes.ENOMSG, {{{ cDefine('ENOMSG') }}} ],
-          [ ErrorCodes.EIDRM, {{{ cDefine('EIDRM') }}} ],
-          [ ErrorCodes.ECHRNG, {{{ cDefine('ECHRNG') }}} ],
-          [ ErrorCodes.EL2NSYNC, {{{ cDefine('EL2NSYNC') }}} ],
-          [ ErrorCodes.EL3HLT, {{{ cDefine('EL3HLT') }}} ],
-          [ ErrorCodes.EL3RST, {{{ cDefine('EL3RST') }}} ],
-          [ ErrorCodes.ELNRNG, {{{ cDefine('ELNRNG') }}} ],
-          [ ErrorCodes.EUNATCH, {{{ cDefine('EUNATCH') }}} ],
-          [ ErrorCodes.ENOCSI, {{{ cDefine('ENOCSI') }}} ],
-          [ ErrorCodes.EL2HLT, {{{ cDefine('EL2HLT') }}} ],
-          [ ErrorCodes.EBADE, {{{ cDefine('EBADE') }}} ],
-          [ ErrorCodes.EBADR, {{{ cDefine('EBADR') }}} ],
-          [ ErrorCodes.EXFULL, {{{ cDefine('EXFULL') }}} ],
-          [ ErrorCodes.ENOANO, {{{ cDefine('ENOANO') }}} ],
-          [ ErrorCodes.EBADRQC, {{{ cDefine('EBADRQC') }}} ],
-          [ ErrorCodes.EBADSLT, {{{ cDefine('EBADSLT') }}} ],
-          [ ErrorCodes.EDEADLOCK, {{{ cDefine('EDEADLOCK') }}} ],
-          [ ErrorCodes.EBFONT, {{{ cDefine('EBFONT') }}} ],
-          [ ErrorCodes.ENOSTR, {{{ cDefine('ENOSTR') }}} ],
-          [ ErrorCodes.ENODATA, {{{ cDefine('ENODATA') }}} ],
-          [ ErrorCodes.ETIME, {{{ cDefine('ETIME') }}} ],
-          [ ErrorCodes.ENOSR, {{{ cDefine('ENOSR') }}} ],
-          [ ErrorCodes.ENONET, {{{ cDefine('ENONET') }}} ],
-          [ ErrorCodes.ENOPKG, {{{ cDefine('ENOPKG') }}} ],
-          [ ErrorCodes.EREMOTE, {{{ cDefine('EREMOTE') }}} ],
-          [ ErrorCodes.ENOLINK, {{{ cDefine('ENOLINK') }}} ],
-          [ ErrorCodes.EADV, {{{ cDefine('EADV') }}} ],
-          [ ErrorCodes.ESRMNT, {{{ cDefine('ESRMNT') }}} ],
-          [ ErrorCodes.ECOMM, {{{ cDefine('ECOMM') }}} ],
-          [ ErrorCodes.EPROTO, {{{ cDefine('EPROTO') }}} ],
-          [ ErrorCodes.EMULTIHOP, {{{ cDefine('EMULTIHOP') }}} ],
-          [ ErrorCodes.EDOTDOT, {{{ cDefine('EDOTDOT') }}} ],
-          [ ErrorCodes.EBADMSG, {{{ cDefine('EBADMSG') }}} ],
-          [ ErrorCodes.EOVERFLOW, {{{ cDefine('EOVERFLOW') }}} ],
-          [ ErrorCodes.ENOTUNIQ, {{{ cDefine('ENOTUNIQ') }}} ],
-          [ ErrorCodes.EBADFD, {{{ cDefine('EBADFD') }}} ],
-          [ ErrorCodes.EREMCHG, {{{ cDefine('EREMCHG') }}} ],
-          [ ErrorCodes.ELIBACC, {{{ cDefine('ELIBACC') }}} ],
-          [ ErrorCodes.ELIBBAD, {{{ cDefine('ELIBBAD') }}} ],
-          [ ErrorCodes.ELIBSCN, {{{ cDefine('ELIBSCN') }}} ],
-          [ ErrorCodes.ELIBMAX, {{{ cDefine('ELIBMAX') }}} ],
-          [ ErrorCodes.ELIBEXEC, {{{ cDefine('ELIBEXEC') }}} ],
-          [ ErrorCodes.EILSEQ, {{{ cDefine('EILSEQ') }}} ],
-          [ ErrorCodes.ERESTART, {{{ cDefine('ERESTART') }}} ],
-          [ ErrorCodes.ESTRPIPE, {{{ cDefine('ESTRPIPE') }}} ],
-          [ ErrorCodes.EUSERS, {{{ cDefine('EUSERS') }}} ],
-          [ ErrorCodes.ENOTSOCK, {{{ cDefine('ENOTSOCK') }}} ],
-          [ ErrorCodes.EDESTADDRREQ, {{{ cDefine('EDESTADDRREQ') }}} ],
-          [ ErrorCodes.EMSGSIZE, {{{ cDefine('EMSGSIZE') }}} ],
-          [ ErrorCodes.EPROTOTYPE, {{{ cDefine('EPROTOTYPE') }}} ],
-          [ ErrorCodes.ENOPROTOOPT, {{{ cDefine('ENOPROTOOPT') }}} ],
-          [ ErrorCodes.EPROTONOSUPPORT, {{{ cDefine('EPROTONOSUPPORT') }}} ],
-          [ ErrorCodes.ESOCKTNOSUPPORT, {{{ cDefine('ESOCKTNOSUPPORT') }}} ],
-          [ ErrorCodes.EOPNOTSUPP, {{{ cDefine('EOPNOTSUPP') }}} ],
-          [ ErrorCodes.ENOTSUP, {{{ cDefine('ENOTSUP') }}} ],
-          [ ErrorCodes.EPFNOSUPPORT, {{{ cDefine('EPFNOSUPPORT') }}} ],
-          [ ErrorCodes.EAFNOSUPPORT, {{{ cDefine('EAFNOSUPPORT') }}} ],
-          [ ErrorCodes.EADDRINUSE, {{{ cDefine('EADDRINUSE') }}} ],
-          [ ErrorCodes.EADDRNOTAVAIL, {{{ cDefine('EADDRNOTAVAIL') }}} ],
-          [ ErrorCodes.ENETDOWN, {{{ cDefine('ENETDOWN') }}} ],
-          [ ErrorCodes.ENETUNREACH, {{{ cDefine('ENETUNREACH') }}} ],
-          [ ErrorCodes.ENETRESET, {{{ cDefine('ENETRESET') }}} ],
-          [ ErrorCodes.ECONNABORTED, {{{ cDefine('ECONNABORTED') }}} ],
-          [ ErrorCodes.ECONNRESET, {{{ cDefine('ECONNRESET') }}} ],
-          [ ErrorCodes.ENOBUFS, {{{ cDefine('ENOBUFS') }}} ],
-          [ ErrorCodes.EISCONN, {{{ cDefine('EISCONN') }}} ],
-          [ ErrorCodes.ENOTCONN, {{{ cDefine('ENOTCONN') }}} ],
-          [ ErrorCodes.ESHUTDOWN, {{{ cDefine('ESHUTDOWN') }}} ],
-          [ ErrorCodes.ETOOMANYREFS, {{{ cDefine('ETOOMANYREFS') }}} ],
-          [ ErrorCodes.ETIMEDOUT, {{{ cDefine('ETIMEDOUT') }}} ],
-          [ ErrorCodes.ECONNREFUSED, {{{ cDefine('ECONNREFUSED') }}} ],
-          [ ErrorCodes.EHOSTDOWN, {{{ cDefine('EHOSTDOWN') }}} ],
-          [ ErrorCodes.EHOSTUNREACH, {{{ cDefine('EHOSTUNREACH') }}} ],
-          [ ErrorCodes.EALREADY, {{{ cDefine('EALREADY') }}} ],
-          [ ErrorCodes.EINPROGRESS, {{{ cDefine('EINPROGRESS') }}} ],
-          [ ErrorCodes.ESTALE, {{{ cDefine('ESTALE') }}} ],
-          [ ErrorCodes.EUCLEAN, {{{ cDefine('EUCLEAN') }}} ],
-          [ ErrorCodes.ENOTNAM, {{{ cDefine('ENOTNAM') }}} ],
-          [ ErrorCodes.ENAVAIL, {{{ cDefine('ENAVAIL') }}} ],
-          [ ErrorCodes.EISNAM, {{{ cDefine('EISNAM') }}} ],
-          [ ErrorCodes.EREMOTEIO, {{{ cDefine('EREMOTEIO') }}} ],
-          [ ErrorCodes.EDQUOT, {{{ cDefine('EDQUOT') }}} ],
-          [ ErrorCodes.ENOMEDIUM, {{{ cDefine('ENOMEDIUM') }}} ],
-          [ ErrorCodes.EMEDIUMTYPE, {{{ cDefine('EMEDIUMTYPE') }}} ],
-          [ ErrorCodes.ECANCELED, {{{ cDefine('ECANCELED') }}} ],
-          [ ErrorCodes.ENOKEY, {{{ cDefine('ENOKEY') }}} ],
-          [ ErrorCodes.EKEYEXPIRED, {{{ cDefine('EKEYEXPIRED') }}} ],
-          [ ErrorCodes.EKEYREVOKED, {{{ cDefine('EKEYREVOKED') }}} ],
-          [ ErrorCodes.EKEYREJECTED, {{{ cDefine('EKEYREJECTED') }}} ],
-          [ ErrorCodes.EOWNERDEAD, {{{ cDefine('EOWNERDEAD') }}} ],
-          [ ErrorCodes.ENOTRECOVERABLE, {{{ cDefine('ENOTRECOVERABLE') }}} ],
-          [ ErrorCodes.ERFKILL, {{{ cDefine('ERFKILL') }}} ],
-          [ ErrorCodes.EHWPOISON, {{{ cDefine('EHWPOISON') }}} ]
-        ]);
-
-        const error = (typeof sock_fd == 'undefined' ?
-            tizentvwasm.SocketsManager.getErrorCode() :
-            tizentvwasm.SocketsManager.getErrorCode(sock_fd));
-        if (errorCodesMap.has(error)) {
-          return errorCodesMap.get(error);
-        } else {
-          return 0;
-        }
       },
       //
       // actual sock ops
@@ -308,7 +383,7 @@ mergeInto(LibraryManager.library, {
         try {
           const result = tizentvwasm.SocketsManager.poll([poll_fd], 0);
         } catch (err) {
-          throw new FS.ErrnoError(this.getErrorCode());
+          throw new FS.ErrnoError(SOCKFS.getErrorCode());
         }
 
         return SOCKFS.pollEventsConvert(poll_fd.revents);
@@ -321,32 +396,41 @@ mergeInto(LibraryManager.library, {
           tizentvwasm.SocketsManager.close(sock.sock_fd);
           sock.sock_fd = -1; // mark thas socket is closed
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS close error on socket close errno: [${err}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
-      bind: function(sock, addr, port) {
+      bind: function(sock, addr, addrlen) {
+        if (!addr) {
+          throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+        }
+        if (!addrlen) {
+          throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
+        }
+        const sockaddr = HEAPU8.subarray(addr, addr + addrlen);
+        const netAddr = SOCKFS.createNetAddressFromBytes(sockaddr);
         try {
-          const netAddr = SOCKFS.createNetAddress(addr, port);
           tizentvwasm.SocketsManager.bind(sock.sock_fd, netAddr);
         } catch (err) {
-          const errorCode = this.getErrorCode(sock.sock_fd);
-          if (errorCode) {
-            throw new FS.ErrnoError(errorCode);
-          }
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
+        return 0;
       },
-      connect: function(sock, addr, port) {
+      connect: function(sock, addr, addrlen) {
+        if (!addr) {
+          throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+        }
+        if (!addrlen) {
+          throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
+        }
+        const sockaddr = HEAPU8.subarray(addr, addr + addrlen);
+        const netAddr = SOCKFS.createNetAddressFromBytes(sockaddr);
         try {
-          const netAddr = SOCKFS.createNetAddress(addr, port);
           tizentvwasm.SocketsManager.connect(sock.sock_fd, netAddr);
         } catch (err) {
-          const errorCode = this.getErrorCode(sock.sock_fd);
-          if (errorCode) {
-            throw new FS.ErrnoError(errorCode);
-          }
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
+        return 0;
       },
       listen: function(sock, backlog) {
         if (sock.type !== SOCKFS.SockType.SOCK_STREAM.value) {
@@ -356,7 +440,7 @@ mergeInto(LibraryManager.library, {
         try {
           tizentvwasm.SocketsManager.listen(sock.sock_fd, backlog);
         } catch (err) {
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
@@ -397,75 +481,126 @@ mergeInto(LibraryManager.library, {
           // map the new stream to the socket structure (sockets have a 1:1
           // relationship with a stream)
           sock.stream = stream;
-          let fd= sock.stream.fd;
+          const id = __createSocketOnRenderThread(listensock.family, listensock.type, listensock.protocol, newSockSync);
+          FS.moveStream(sock.stream.fd, id);
+          let fd = sock.stream.fd;
           let st = FS.getStream(fd);
           return sock;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS accept error - errno: [${this.getErrorCode(listensock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(listensock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(listensock.sock_fd));
         }
 
       },
       getname: function(sock, peer) {
         console.log("SOCKFS getname() not implemented");
       },
-      sendmsg: function(sock, buffer, offset, length, addr, port) {
-        if (ArrayBuffer.isView(buffer)) {
-          offset += buffer.byteOffset;
-          buffer = buffer.buffer;
-        }
-
-        let data = new Uint8Array(buffer, offset, length);
+      sendto: function(sock, addr, addrlen, flags, dest, destlen) {
+        const data = HEAPU8.subarray(addr, addr + addrlen);
         let netAddr = null;
-
-        if (sock.type == SOCKFS.SockType.SOCK_STREAM.value) {
+        if (dest && destlen) {
+          const sockaddr = HEAPU8.subarray(dest, dest + destlen);
+          netAddr = SOCKFS.createNetAddressFromBytes(sockaddr);
+        } else {
           try {
-            return tizentvwasm.SocketsManager.send(sock.sock_fd, data, 0);
+            netAddr = tizentvwasm.SocketsManager.getPeerName(sock.sock_fd);
           } catch (err) {
-            SOCKFS.doLog(`SOCKFS sendmsg[${sock.sock_fd}] error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-            throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
-          }
-        } else if (sock.type == SOCKFS.SockType.SOCK_DGRAM.value) {
-          if (!addr || port === undefined || port === null) {
-            try {
-              netAddr = tizentvwasm.SocketsManager.getPeerName(sock.sock_fd);
-            } catch (err) {
-              throw new FS.ErrnoError({{{ cDefine('EDESTADDRREQ') }}});
+            let error = SOCKFS.getErrorCode(sock.sock_fd);
+            if (error === {{{ cDefine('ENOTCONN') }}}) {
+              // Slight inconsistency between errors reported by
+              // getpeername(2) and sendto(2) when peer isn't connected.
+              // See man pages for these two functions.
+              error = {{{ cDefine('EDESTADDRREQ') }}};
             }
-          } else {
-            netAddr = SOCKFS.createNetAddress(addr, port);
+            throw new FS.ErrnoError(error);
           }
-          try {
-            return tizentvwasm.SocketsManager.sendTo(sock.sock_fd, data, 0, netAddr);
-          } catch (err) {
-            SOCKFS.doLog(`SOCKFS sendmsg[${sock.sock_fd}] error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-            throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
-          }
+        }
+        try {
+          return tizentvwasm.SocketsManager.sendTo(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags), netAddr);
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
       },
-      recvmsg: function(sock, length) {
-        let addr = "", port = 0;
-        let data = new Uint8Array(length);
-        let buffer;
-        try {
-          if (sock.type == SOCKFS.SockType.SOCK_STREAM.value) {
-            const retVal = tizentvwasm.SocketsManager.recv(sock.sock_fd, data, 0);
-            buffer = new Uint8Array(data.buffer, 0, retVal);
-          } else {
-            const retVal = tizentvwasm.SocketsManager.recvFrom(sock.sock_fd, data, 0);
-            buffer = new Uint8Array(data.buffer, 0, retVal.bytesRead);
-            addr = SOCKFS.createAddrFromNetAddress(retVal.peerAddress);
-            port = retVal.peerAddress.port;
-          }
-        } catch (err) {
-          SOCKFS.doLog(`SOCKFS recvmsg error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+      sendmsg: function(sock, msgPtr, flags) {
+        const name = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_name, '*') }}};
+        const namelen = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_namelen, 'i32') }}};
+        const iov = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_iov, '*') }}};
+        const iovlen = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_iovlen, 'i32') }}};
+
+        let address = null;
+        if (name && namelen) {
+          const sockaddr = HEAPU8.subarray(name, name + namelen);
+          address = SOCKFS.createNetAddressFromBytes(sockaddr);
         }
-        return {
-          buffer: buffer,
-          addr: addr,
-          port: port,
-        };
+
+        let msgs = [];
+        for (let i = 0; i < iovlen; ++i) {
+          msgs.push(new Uint8Array(
+            buffer,
+            {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_base, 'i8*') }}},
+            {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_len, 'i32') }}}));
+        }
+
+        try {
+          return tizentvwasm.SocketsManager.sendMsg(sock.sock_fd, address, msgs, SOCKFS.msgFlagsToJs(flags));
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
+        }
+      },
+      recvfrom: function(sock, bufPtr, len, flags, addrPtr, addrlenPtr) {
+        const data = HEAPU8.subarray(bufPtr, bufPtr + len);
+        if (!addrPtr || !addrlenPtr) {
+          try {
+            return tizentvwasm.SocketsManager.recv(sock, data, SOCKFS.msgFlagsToJs(flags));
+          } catch (err) {
+            throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+          }
+        }
+        let retVal = null;
+        try {
+          retVal = tizentvwasm.SocketsManager.recvFrom(sock, data, SOCKFS.msgFlagsToJs(flags));
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+        }
+
+        if (addrPtr && addrlenPtr && retVal.peerAddress != null) {
+          const peerAddr =
+              SOCKFS.createBytesFromNetAddress(retVal.peerAddress);
+          const addrlen = Math.min(HEAP32[addrlenPtr >> 2], peerAddr.length);
+          HEAP8.set(peerAddr.subarray(0, addrlen), addrPtr);
+          HEAP32[addrlenPtr >> 2] = addrlen;
+        }
+
+        return retVal.bytesRead;
+      },
+      recvmsg: function(sock, msgPtr, flags) {
+        const name = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_name, '*') }}};
+        const namelen = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_namelen, 'i32') }}};
+        const iov = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_iov, '*') }}};
+        const iovlen = {{{ makeGetValue('msgPtr', C_STRUCTS.msghdr.msg_iovlen, 'i32') }}};
+
+        const msgs = [];
+        for (let i = 0; i < iovlen; ++i) {
+          msgs.push(new Uint8Array(
+            buffer,
+            {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_base, 'i8*') }}},
+            {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_len, 'i32') }}}));
+        }
+
+        let ret = null;
+        try {
+          ret = tizentvwasm.SocketsManager.recvMsg(sock, msgs, SOCKFS.msgFlagsToJs(flags));
+        } catch (err) {
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+        }
+        const ret_flags = SOCKFS.msgFlagsFromJs(ret.flags);
+        if (name && namelen && ret.peerAddress) {
+          const peerAddress = SOCKFS.createBytesFromNetAddress(ret.peerAddress);
+          const addrLen = Math.min(namelen, peerAddress.length);
+          HEAP8.set(peerAddress.subarray(0, addrLen), name);
+          {{{ makeSetValue('msgPtr', C_STRUCTS.msghdr.msg_namelen, 'addrLen', 'i32') }}}
+        }
+        {{{ makeSetValue('msgPtr', C_STRUCTS.msghdr.msg_flags, 'ret_flags', 'i32') }}};
+        return ret.bytesRead;
       },
       setsockopt: function(sock, level, optname, optval, optlen) {
         if (!optval) {
@@ -481,8 +616,7 @@ mergeInto(LibraryManager.library, {
         try {
           tizentvwasm.SocketsManager.setSockOpt(sock.sock_fd, args.level, args.option, value);
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS setsockopt error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
         return 0;
       },
@@ -499,8 +633,7 @@ mergeInto(LibraryManager.library, {
         try {
           val = tizentvwasm.SocketsManager.getSockOpt(sock.sock_fd, args.level, args.option);
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockopt error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
         const encVal = SOCKFS.encodeValue(optname, val, _optlen);
         HEAPU8.set(encVal, optval);
@@ -518,8 +651,7 @@ mergeInto(LibraryManager.library, {
 
           return 0;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
       },
       getpeername: function(sock, addr, addrlen) {
@@ -533,14 +665,12 @@ mergeInto(LibraryManager.library, {
 
           return 0;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS getsockname error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
       },
       shutdown: function(sock, how) {
         const howFlag = SOCKFS.intToShutdownType(how);
         if (howFlag === null) {
-          SOCKFS.doLog("SOCKFS shutdown: not supported shutdown type");
           throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
         }
 
@@ -548,8 +678,7 @@ mergeInto(LibraryManager.library, {
           tizentvwasm.SocketsManager.shutdown(sock.sock_fd, howFlag);
           return 0;
         } catch (err) {
-          SOCKFS.doLog(`SOCKFS shutdown error - errno: [${this.getErrorCode(sock.sock_fd)}]`);
-          throw new FS.ErrnoError(this.getErrorCode(sock.sock_fd));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
       },
     },
@@ -666,6 +795,31 @@ mergeInto(LibraryManager.library, {
 
       return new tizentvwasm.NetAddress(family, addrBytes, port);
     },
+    createNetAddressFromBytes: function(bytes) {
+      const familyId = bytes[0];
+      let family;
+      let addrBytes;
+      const port = (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)).getUint16(2, false);
+
+      switch (familyId) {
+        case SOCKFS.Family.AF_INET.value:
+          family = "af_inet";
+          addrBytes = bytes.subarray(
+            {{{ C_STRUCTS.sockaddr_in.sin_addr.s_addr }}},
+            {{{ C_STRUCTS.sockaddr_in.sin_addr.s_addr }}} + SOCKFS.sizeof.IPv4ADDR);
+          break;
+        case SOCKFS.Family.AF_INET6.value:
+          family = "af_inet6";
+          addrBytes = bytes.subarray(
+            {{{ C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr }}},
+            {{{ C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr }}} +
+                SOCKFS.sizeof.IPv6ADDR);
+          break;
+        default:
+          throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
+      }
+      return new tizentvwasm.NetAddress(family, addrBytes, port);
+    },
     getLevelAndOptionString: function(level, option, fromGet) {
       let result = null;
       if (level == SOCKFS.levels.IPPROTO_TCP) {
@@ -674,7 +828,6 @@ mergeInto(LibraryManager.library, {
           result["level"] = "ipproto_tcp";
           result["option"] = "tcp_nodelay";
         } else {
-          SOCKFS.doLog("SOCKFS getLevelAndOptionString: not supported option name");
           throw new FS.ErrnoError({{{ cDefine('ENOPROTOOPT') }}});
         }
       } else if (level == SOCKFS.levels.SOL_SOCKET) {
@@ -724,11 +877,9 @@ mergeInto(LibraryManager.library, {
             result["option"] = "so_sndtimeo";
             break;
           default:
-            SOCKFS.doLog("SOCKFS getLevelAndOptionString: not supported option name");
             throw new FS.ErrnoError({{{ cDefine('ENOPROTOOPT') }}});
         }
       } else {
-        SOCKFS.doLog("SOCKFS getLevelAndOptionString: not supported level");
         if (fromGet) {
           throw new FS.ErrnoError({{{ cDefine('EOPNOTSUPP') }}});
         } else {
@@ -843,7 +994,6 @@ mergeInto(LibraryManager.library, {
           bytes.set(netAddr.bytes, {{{ C_STRUCTS.sockaddr_in6.sin6_addr.__in6_union.__s6_addr }}});
           break;
         default:
-          SOCKFS.doLog("SOCKFS createBytesFromNetAddress: not supported address family");
           throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       }
       return bytes;
@@ -869,7 +1019,6 @@ mergeInto(LibraryManager.library, {
           }
           break;
         default:
-          SOCKFS.doLog("SOCKFS createAddrFromNetAddress: not supported address family ("+netAddr.family+")");
           throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       }
       return addr;
@@ -896,10 +1045,66 @@ mergeInto(LibraryManager.library, {
       });
       return result;
     },
-    doLog: function(...args) {
-      if (SOCKFS.conf.loggingEnabled) {
-        console.log.apply(null, args);
-      }
+    getMsgFlagsMap: function() {
+      const MsgFlags = tizentvwasm.MsgFlags;
+      return [
+        [ MsgFlags.MSG_OOB, {{{ cDefine('MSG_OOB') }}} ],
+        [ MsgFlags.MSG_PEEK, {{{ cDefine('MSG_PEEK') }}} ],
+        [ MsgFlags.MSG_EOR, {{{ cDefine('MSG_EOR') }}} ],
+        [ MsgFlags.MSG_WAITALL, {{{ cDefine('MSG_WAITALL') }}} ],
+        [ MsgFlags.MSG_NOSIGNAL, {{{ cDefine('MSG_NOSIGNAL') }}} ]
+      ];
     },
+    msgFlagsToJs: function(flags) {
+      if (flags === 0) {
+        return 0;
+      }
+
+      let result = 0;
+      SOCKFS.getMsgFlagsMap().forEach((item) => {
+        if ((flags & item[1]) === item[1]) {
+          result |= item[0];
+        }
+      });
+      return result;
+    },
+    msgFlagsFromJs: function(flags) {
+      if (flags === 0) {
+        return 0;
+      }
+
+      let result = 0;
+      SOCKFS.getMsgFlagsMap().forEach((item) => {
+        if ((flags & item[0]) === item[0]) {
+          result |= item[1];
+        }
+      });
+      return result;
+    },
+  },
+  _getSocketBuffer__proxy: 'sync',
+  _getSocketBuffer: function() {
+    return SOCKFS.getSocketMapPtr();
+  },
+  _createSocketOnRenderThread__proxy: 'sync',
+  _createSocketOnRenderThread: function(family, type, protocol, socket) {
+    const fd = SOCKFS.createSocketOnCurrentThread(family, type, protocol, socket);
+    SOCKFS.setSocketFdInMap(fd);
+    return fd;
+  },
+  _closeSocketOnRenderThread__proxy: 'sync',
+  _closeSocketOnRenderThread: function(fd) {
+    FS.closeStream(fd);
+    SOCKFS.clearSocketFdInMap(fd);
+  },
+  _cloneSocketFromRenderThread__proxy: 'sync',
+  _cloneSocketFromRenderThread: function(fd) {
+    const stream = FS.getStream(fd);
+    const ptr = _malloc(16);
+    HEAP32[ptr >> 2] = stream.node.sock.family;
+    HEAP32[(ptr >> 2) + 1] = stream.node.sock.type;
+    HEAP32[(ptr >> 2) + 2] = stream.node.sock.protocol;
+    HEAP32[(ptr >> 2) + 3] = stream.node.sock.sock_fd;
+    return ptr;
   },
 });

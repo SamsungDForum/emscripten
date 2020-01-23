@@ -199,7 +199,15 @@ var SyscallsLibrary = {
     getStreamFromFD: function(fd) {
       // TODO: when all syscalls use wasi, can remove the next line
       if (fd === undefined) fd = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+      if (SOCKFS.hasSocket(fd)) {
+        var stream = SOCKFS.getStream(fd);
+      } else {
+        var stream = FS.getStream(fd);
+      }
+#else
       var stream = FS.getStream(fd);
+#endif
       if (!stream) throw new FS.ErrnoError({{{ cDefine('EBADF') }}});
 #if SYSCALL_DEBUG
       err('    (stream: "' + stream.path + '")');
@@ -207,10 +215,23 @@ var SyscallsLibrary = {
       return stream;
     },
 #if ENVIRONMENT_MAY_BE_TIZEN
-    isSocketOnCurrentThread: function(args){
+    getSockStreamFromFD: function(fd) {
+      const stream = SOCKFS.getStreamFromFD(fd);
+      if (!stream) {
+        throw new FS.ErrnoError(ERRNO_CODES.EBADF);
+      }
+#if SYSCALL_DEBUG
+      err('    (stream: "' + stream.path + '")');
+#endif
+      return stream;
+    },
+    isSocketOnCurrentThread: function(args) {
       let arg_ptr = args[1];
       let fd = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
-        return SOCKFS.hasSocket(fd);
+      return SOCKFS.hasSocket(fd);
+    },
+    isSocket: function(fd) {
+      return SOCKFS.hasSocket(fd);
     },
     syscall142ContainsSockets: function(args) {
       let arg_ptr = args[1];
@@ -592,7 +613,11 @@ var SyscallsLibrary = {
     return -{{{ cDefine('EPERM') }}};
   },
 #if PROXY_POSIX_SOCKETS == 0
+#if ENVIRONMENT_MAY_BE_TIZEN
+  __syscall102__deps: ['$SOCKFS', '$DNS', '_read_sockaddr', '_write_sockaddr', '_getSocketBuffer', '_createSocketOnRenderThread', '_closeSocketOnRenderThread', '_cloneSocketFromRenderThread'],
+#else
   __syscall102__deps: ['$SOCKFS', '$DNS', '_read_sockaddr', '_write_sockaddr'],
+#endif
   __syscall102: function(which, varargs) { // socketcall
     var call = SYSCALLS.get(), socketvararg = SYSCALLS.get();
     // socketcalls pass the rest of the arguments in a struct
@@ -609,6 +634,8 @@ var SyscallsLibrary = {
     var getSocketAddress = function(allowNull) {
       var addrp = SYSCALLS.get(), addrlen = SYSCALLS.get();
       if (allowNull && addrp === 0) return null;
+      if (!addrp) throw new FS.ErrnoError({{{ cDefine('EFAULT') }}});
+      if (!addrlen) throw new FS.ErrnoError({{{ cDefine('EINVAL') }}});
       var info = __read_sockaddr(addrp, addrlen);
       if (info.errno) throw new FS.ErrnoError(info.errno);
       info.addr = DNS.lookup_addr(info.addr) || info.addr;
@@ -628,14 +655,24 @@ var SyscallsLibrary = {
         return sock.stream.fd;
       }
       case 2: { // bind
+#if ENVIRONMENT_MAY_BE_TIZEN
+        const sock = getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+        sock.sock_ops.bind(sock, addr, addrlen);
+#else
         var sock = getSocketFromFD(), info = getSocketAddress();
         sock.sock_ops.bind(sock, info.addr, info.port);
+#endif // ENVIRONMENT_MAY_BE_TIZEN
         return 0;
       }
       case 3: { // connect
+#if ENVIRONMENT_MAY_BE_TIZEN
+        const sock = getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+        return sock.sock_ops.connect(sock, addr, addrlen);
+#else
         var sock = getSocketFromFD(), info = getSocketAddress();
         sock.sock_ops.connect(sock, info.addr, info.port);
         return 0;
+#endif
       }
       case 4: { // listen
         var sock = getSocketFromFD(), backlog = SYSCALLS.get();
@@ -695,6 +732,10 @@ var SyscallsLibrary = {
         return 0;
       }
       case 11: { // sendto
+#if ENVIRONMENT_MAY_BE_TIZEN
+        var sock = getSocketFromFD(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get(), flags = SYSCALLS.get(), dest = SYSCALLS.get(), destlen = SYSCALLS.get();
+        return sock.sock_ops.sendto(sock, addr, addrlen, flags, dest, destlen);
+#else
         var sock = getSocketFromFD(), message = SYSCALLS.get(), length = SYSCALLS.get(), flags = SYSCALLS.get(), dest = getSocketAddress(true);
         if (!dest) {
           // send, no address provided
@@ -703,9 +744,13 @@ var SyscallsLibrary = {
           // sendto an address
           return sock.sock_ops.sendmsg(sock, {{{ heapAndOffset('HEAP8', 'message') }}}, length, dest.addr, dest.port);
         }
+#endif // ENVIRONMENT_MAY_BE_TIZEN
       }
       case 12: { // recvfrom
         var sock = getSocketFromFD(), buf = SYSCALLS.get(), len = SYSCALLS.get(), flags = SYSCALLS.get(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        return sock.sock_ops.recvfrom(sock.sock_fd, buf, len, flags, addr, addrlen);
+#else
         var msg = sock.sock_ops.recvmsg(sock, len);
         if (!msg) return 0; // socket is closed
         if (msg.addr && addr && addrlen) {
@@ -716,6 +761,7 @@ var SyscallsLibrary = {
         }
         HEAPU8.set(msg.buffer, buf);
         return msg.buffer.byteLength;
+#endif // ENVIRONMENT_MAY_BE_TIZEN
       }
 #if ENVIRONMENT_MAY_BE_TIZEN
       case 13: { // shutdown
@@ -727,8 +773,7 @@ var SyscallsLibrary = {
       case 14: { // setsockopt
 #if ENVIRONMENT_MAY_BE_TIZEN
         var sock = SYSCALLS.getSocketFromFD(), level = SYSCALLS.get(), optname = SYSCALLS.get(), optval = SYSCALLS.get(), optlen = SYSCALLS.get();
-        sock.sock_ops.setsockopt(sock, level, optname, optval, optlen);
-        return 0;
+        return sock.sock_ops.setsockopt(sock, level, optname, optval, optlen);
 #else
         return -{{{ cDefine('ENOPROTOOPT') }}}; // The option is unknown at the level indicated.
 #endif  // ENVIRONMENT_MAY_BE_TIZEN
@@ -736,8 +781,7 @@ var SyscallsLibrary = {
       case 15: { // getsockopt
         var sock = SYSCALLS.getSocketFromFD(), level = SYSCALLS.get(), optname = SYSCALLS.get(), optval = SYSCALLS.get(), optlen = SYSCALLS.get();
 #if ENVIRONMENT_MAY_BE_TIZEN
-        sock.sock_ops.getsockopt(sock, level, optname, optval, optlen);
-        return 0;
+        return sock.sock_ops.getsockopt(sock, level, optname, optval, optlen);
 #else
         // Minimal getsockopt aimed at resolving https://github.com/emscripten-core/emscripten/issues/2211
         // so only supports SOL_SOCKET with SO_ERROR.
@@ -754,6 +798,9 @@ var SyscallsLibrary = {
       }
       case 16: { // sendmsg
         var sock = getSocketFromFD(), message = SYSCALLS.get(), flags = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        return sock.sock_ops.sendmsg(sock, message, flags);
+#else
         var iov = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iov, '*') }}};
         var num = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iovlen, 'i32') }}};
         // read the address and port to send to
@@ -776,15 +823,19 @@ var SyscallsLibrary = {
         for (var i = 0; i < num; i++) {
           var iovbase = {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_base, 'i8*') }}};
           var iovlen = {{{ makeGetValue('iov', '(' + C_STRUCTS.iovec.__size__ + ' * i) + ' + C_STRUCTS.iovec.iov_len, 'i32') }}};
-          for (var j = 0; j < iovlen; j++) {  
+          for (var j = 0; j < iovlen; j++) {
             view[offset++] = {{{ makeGetValue('iovbase', 'j', 'i8') }}};
           }
         }
         // write the buffer
         return sock.sock_ops.sendmsg(sock, view, 0, total, addr, port);
+#endif // ENVIRONMENT_MAY_BE_TIZEN
       }
       case 17: { // recvmsg
         var sock = getSocketFromFD(), message = SYSCALLS.get(), flags = SYSCALLS.get();
+#if ENVIRONMENT_MAY_BE_TIZEN
+        return sock.sock_ops.recvmsg(sock.sock_fd, message, flags);
+#else
         var iov = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iov, 'i8*') }}};
         var num = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iovlen, 'i32') }}};
         // get the total amount of data we can read across all arrays
@@ -839,6 +890,7 @@ var SyscallsLibrary = {
         // MSG_CTRUNC
 
         return bytesRead;
+#endif // ENVIRONMENT_MAY_BE_TIZEN
       }
       default: {
 #if SYSCALL_DEBUG

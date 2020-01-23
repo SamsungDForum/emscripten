@@ -284,8 +284,12 @@ function JSify(data, functionsOnly) {
           assert(typeof original === 'function');
           contentText = modifyFunction(snippet, function(name, args, body) {
             let socketPresenceCheck = 'if (';
-            if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall3' ||
-                ident == '__syscall4' || ident == '__syscall6')) {  // read, write, close
+            if (ENVIRONMENT_MAY_BE_TIZEN && (ident == 'fd_close' ||
+                ident == 'fd_write' || ident == 'fd_read')) {
+              socketPresenceCheck = 'const isSocket = SYSCALLS.isSocket(fd);\n ' +
+                'if (!isSocket && ';
+            } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall3' ||
+                       ident == '__syscall4' || ident == '__syscall6')) {
               socketPresenceCheck = 'const isSocket = SYSCALLS.isSocketOnCurrentThread(arguments);\n ' +
                 'if (!isSocket && ';
             } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall142')) { // select

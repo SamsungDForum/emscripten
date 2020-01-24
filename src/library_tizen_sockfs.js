@@ -500,24 +500,17 @@ mergeInto(LibraryManager.library, {
         if (dest && destlen) {
           const sockaddr = HEAPU8.subarray(dest, dest + destlen);
           netAddr = SOCKFS.createNetAddressFromBytes(sockaddr);
+          try {
+            return tizentvwasm.SocketsManager.sendTo(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags), netAddr);
+          } catch (err) {
+            throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
+          }
         } else {
           try {
-            netAddr = tizentvwasm.SocketsManager.getPeerName(sock.sock_fd);
+            return tizentvwasm.SocketsManager.send(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags));
           } catch (err) {
-            let error = SOCKFS.getErrorCode(sock.sock_fd);
-            if (error === {{{ cDefine('ENOTCONN') }}}) {
-              // Slight inconsistency between errors reported by
-              // getpeername(2) and sendto(2) when peer isn't connected.
-              // See man pages for these two functions.
-              error = {{{ cDefine('EDESTADDRREQ') }}};
-            }
-            throw new FS.ErrnoError(error);
+            throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
           }
-        }
-        try {
-          return tizentvwasm.SocketsManager.sendTo(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags), netAddr);
-        } catch (err) {
-          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
       },
       sendmsg: function(sock, msgPtr, flags) {

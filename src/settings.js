@@ -1328,6 +1328,12 @@ var USE_HARFBUZZ = 0;
 // 3 = use cocos2d v3 from emscripten-ports
 var USE_COCOS2D = 0;
 
+// 1 == use openssl from emscripten ports
+var USE_OPENSSL = 0;
+
+// 1 == use openssl from emscripten ports
+var USE_CURL = 0;
+
 // Formats to support in SDL2_image. Valid values: bmp, gif, lbm, pcx, png, pnm, tga, xcf, xpm, xv
 var SDL2_IMAGE_FORMATS = [];
 

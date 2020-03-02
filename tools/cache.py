@@ -131,7 +131,10 @@ class Cache(object):
       logger.info(message)
       self.ensure()
       temp = creator()
+      logger.info('Got lib: ' + temp)
+      logger.info('it will be cached in :' + cachename)
       if os.path.normcase(temp) != os.path.normcase(cachename):
+        logger.info('Copying file to the cache')
         shared.safe_ensure_dirs(os.path.dirname(cachename))
         shutil.copyfile(temp, cachename)
       logger.info(' - ok')

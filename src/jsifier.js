@@ -138,7 +138,7 @@ function JSify(data, functionsOnly) {
       if (typeof ident == 'function') return ident();
 
       // don't process any special identifiers. These are looked up when processing the base name of the identifier.
-      if (ident.endsWith('__sig') || ident.endsWith('__proxy') || ident.endsWith('__asm') || ident.endsWith('__inline') || ident.endsWith('__deps') || ident.endsWith('__postset')) {
+      if (ident.endsWith('__sig') || ident.endsWith('__proxy') || ident.endsWith('__asm') || ident.endsWith('__inline') || ident.endsWith('__deps') || ident.endsWith('__postset') || ident.endsWith('__host')) {
         return '';
       }
 
@@ -157,7 +157,11 @@ function JSify(data, functionsOnly) {
 
       var noExport = false;
 
-      if (allExternPrimitives.indexOf(ident) != -1) {
+      if (LibraryManager.library[ident + '__host']) {
+        Functions.libraryFunctions[finalName] = 1;
+        Functions.hostFunctions[finalName] = LibraryManager.library[ident];
+        return;
+      } else if (allExternPrimitives.indexOf(ident) != -1) {
         usedExternPrimitives[ident] = 1;
         return;
       } else if ((!LibraryManager.library.hasOwnProperty(ident) && !LibraryManager.library.hasOwnProperty(ident + '__inline')) || SIDE_MODULE) {

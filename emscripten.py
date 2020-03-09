@@ -354,6 +354,7 @@ def function_tables_and_exports(funcs, metadata, mem_init, glue, forwarded_data,
   else:
     global_vars = [] # linkable code accesses globals through function calls
   global_funcs = set(key for key, value in forwarded_json['Functions']['libraryFunctions'].items() if value != 2)
+  host_funcs = forwarded_json['Functions']['hostFunctions']
   global_funcs = sorted(global_funcs.difference(set(global_vars)).difference(implemented_functions))
   if shared.Settings.RELOCATABLE:
     global_funcs += ['g$' + extern for extern in metadata['externs']]
@@ -388,7 +389,7 @@ def function_tables_and_exports(funcs, metadata, mem_init, glue, forwarded_data,
   if shared.Settings.WASM:
     add_standard_wasm_imports(sending)
   sorted_sending_keys = sorted(sending.keys())
-  sending = '{ ' + ', '.join('"' + k + '": ' + sending[k] for k in sorted_sending_keys) + ' }'
+  sending = '{ ' + ', '.join('"' + k + '": ' + (host_funcs[sending[k]] if sending[k] in host_funcs else sending[k]) for k in sorted_sending_keys) + ' }'
 
   receiving = create_receiving(function_table_data, function_tables_defs,
                                exported_implemented_functions, metadata['initializers'])

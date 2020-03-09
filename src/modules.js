@@ -43,6 +43,8 @@ var Functions = {
   implementedFunctions: {},
   // functions added from the library. value 2 means asmLibraryFunction
   libraryFunctions: {},
+  // HostBindings functions that might be directly called from WebAssembly module
+  hostFunctions: {},
 };
 
 var LibraryManager = {
@@ -196,6 +198,7 @@ var LibraryManager = {
     libloop: for (var x in lib) {
       if (x.lastIndexOf('__') > 0) continue; // ignore __deps, __*
       if (lib[x + '__asm']) continue; // ignore asm library functions, those need to be fully optimized
+      if (lib[x + '__host']) continue;
       if (typeof lib[x] === 'string') {
         var target = x;
         while (typeof lib[target] === 'string') {

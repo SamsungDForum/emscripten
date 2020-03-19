@@ -23,9 +23,14 @@ def get(ports, settings, shared):
 
   source_path = os.path.join(ports.get_dir(), 'openssl', 'openssl-' + TAG)
   dest_path = os.path.join(ports.get_build_dir(), 'openssl')
-  open(os.path.join(source_path,
-                    'Configurations/50-emscripten.conf'),
+  open(os.path.join(source_path, 'Configurations', '50-emscripten.conf'),
        'w').write(openssl_emscripten_template_conf)
+
+  def fix_dest_path_for_win(path):
+    if os.name == 'nt':
+      return path.replace('\\', '/')
+    else:
+      return path
 
   # TODO: Currently openssl is built twice once for libcrypto.a and second time
   #       for libssl.a.
@@ -34,7 +39,7 @@ def get(ports, settings, shared):
     configure_args = [
       'perl',
       os.path.join(source_path, 'Configure'),
-      '--prefix=' + dest_path,
+      '--prefix=' + fix_dest_path_for_win(dest_path),
       'no-asm',
       'no-hw',
       '-D_GNU_SOURCE',
@@ -47,6 +52,17 @@ def get(ports, settings, shared):
     # Clear this for OpenSSL as its configure script prepends this to $CC,
     # which is already absolute path.
     env['CROSS_COMPILE'] = ''
+
+    if os.name == 'nt':
+        env['CC'] = 'emcc'
+        env['CXX'] = 'em++'
+        env['AR'] = 'emar'
+        env['LD'] = 'emcc'
+        env['LDSHARED'] = 'emcc'
+        env['RANLIB'] = 'emranlib'
+
+    env['PATH'] = env['PATH'] + os.pathsep + shared.path_from_root()
+
     curr_dir = os.getcwd()
     try:
       os.chdir(source_path)
@@ -56,8 +72,8 @@ def get(ports, settings, shared):
       os.chdir(curr_dir)
       raise
 
-    shared.Building.make(['make', '-j%d' % shared.Building.get_num_cores(), '-C' + source_path, 'build_libs'])
-    shared.Building.make(['make', '-j%d' % shared.Building.get_num_cores(), '-C' + source_path, 'install_dev'])
+    shared.Building.make(['make', '-j%d' % shared.Building.get_num_cores(), '-C' + source_path, 'build_libs'], env=env)
+    shared.Building.make(['make', '-j%d' % shared.Building.get_num_cores(), '-C' + source_path, 'install_dev'], env=env)
 
     ports.install_header_dir(os.path.join(dest_path, 'include', 'openssl'))
 

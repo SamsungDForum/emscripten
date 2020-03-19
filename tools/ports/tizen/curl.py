@@ -37,6 +37,8 @@ def get(ports, settings, shared):
       'cmake',
       '-B' + dest_path,
       '-H' + source_path,
+      '-G', 'Unix Makefiles',
+      '-C' + shared.path_from_root('tools', 'ports', 'tizen', 'curl_cmake.cache'),
       '-DCMAKE_BUILD_TYPE=Release',
       '-DCMAKE_INSTALL_PREFIX=' + dest_path,
       '-DBUILD_CURL_EXE=OFF',

@@ -1310,6 +1310,15 @@ class libstandalonewasm(MuslInternalLibrary):
     return shared.Settings.WASM_BACKEND
 
 
+class lib_tizen_tv_wasm(CXXLibrary):
+  name = 'lib_tizen_tv_wasm'
+  cflags = ['-std=c++11']
+  depends = ['libc++abi']
+
+  def get_files(self):
+    return [shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'tizen_tv_wasm.cc')]
+
+
 # If main() is not in EXPORTED_FUNCTIONS, it may be dce'd out. This can be
 # confusing, so issue a warning.
 def warn_on_unexported_main(symbolses):
@@ -1393,6 +1402,9 @@ def calculate(temp_files, in_temp, stdout_, stderr_, forced=[]):
     always_include.add('libmalloc')
   if shared.Settings.WASM_BACKEND:
     always_include.add('libcompiler_rt')
+
+  if shared.Settings.ENVIRONMENT_MAY_BE_TIZEN:
+    always_include.add('lib_tizen_tv_wasm')
 
   libs_to_link = []
   already_included = set()

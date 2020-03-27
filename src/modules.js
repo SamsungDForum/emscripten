@@ -104,6 +104,11 @@ var LibraryManager = {
       }
     }
 
+    // TizenTV extension libraries
+    if (ENVIRONMENT_MAY_BE_TIZEN) {
+      libraries.push('library_tizen_tv_wasm.js');
+    }
+
     // Additional JS libraries (without AUTO_JS_LIBRARIES, link to these explicitly via -lxxx.js)
     if (AUTO_JS_LIBRARIES) {
       libraries = libraries.concat([

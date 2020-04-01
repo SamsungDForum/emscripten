@@ -17,7 +17,7 @@ def get(ports, settings, shared):
 
   ports.fetch_project(
       'openssl',
-      'https://www.openssl.org/source/openssl-' + TAG + '.tar.gz',
+      'https://www.openssl.org/source/old/1.1.1/openssl-' + TAG + '.tar.gz',
       'openssl-' + TAG,
       sha512hash=HASH)
 

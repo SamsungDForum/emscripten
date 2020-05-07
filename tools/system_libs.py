@@ -1310,9 +1310,27 @@ class libstandalonewasm(MuslInternalLibrary):
     return shared.Settings.WASM_BACKEND
 
 
+class lib_tizen_emss(CXXLibrary):
+  name = 'lib_tizen_emss'
+  cflags = [
+    '-std=c++14',
+    '-isystem' + shared.path_from_root('system', 'lib'),
+  ]
+  depends = ['libc++abi']
+
+  def get_files(self):
+    return [
+      shared.path_from_root('system', 'lib', 'samsung', 'bindings', 'emss_operation_result.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'html', 'html_media_element.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'elementary_media_stream_source.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'elementary_media_track.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'media_key.cc'),
+    ]
+
+
 class lib_tizen_tv_wasm(CXXLibrary):
   name = 'lib_tizen_tv_wasm'
-  cflags = ['-std=c++11']
+  cflags = ['-std=c++14']
   depends = ['libc++abi']
 
   def get_files(self):
@@ -1404,6 +1422,7 @@ def calculate(temp_files, in_temp, stdout_, stderr_, forced=[]):
     always_include.add('libcompiler_rt')
 
   if shared.Settings.ENVIRONMENT_MAY_BE_TIZEN:
+    always_include.add('lib_tizen_emss')
     always_include.add('lib_tizen_tv_wasm')
 
   libs_to_link = []

@@ -108,6 +108,7 @@ var LibraryManager = {
 
     // TizenTV extension libraries
     if (ENVIRONMENT_MAY_BE_TIZEN) {
+      libraries.push('library_tizen_emss.js');
       libraries.push('library_tizen_tv_wasm.js');
     }
 
@@ -215,7 +216,7 @@ var LibraryManager = {
           // Otherwise construct a generic 'function foo() { return _target.apply(null, arguments); }' forwarding.
           // The benefit of the first form is that Closure is able to fully inline and reason about the function.
           // Note that the signature is checked on the alias function, not on the target function. That allows aliases to choose individually which form
-          // to use. 
+          // to use.
           if (lib[x + '__sig']) {
             var argCount = lib[x + '__sig'].length - 1;
             var ret = lib[x + '__sig'] == 'v' ? '' : 'return ';

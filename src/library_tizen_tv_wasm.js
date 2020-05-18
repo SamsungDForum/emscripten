@@ -15,6 +15,34 @@ const LibraryTizenTVWasm = {
       stringToUTF8(jsString, ptr, length);
       return ptr;
     },
+
+    getLegacyWasmPlayerVersion: function() {
+      if (tizentvwasm.ElementaryMediaStreamSource) {
+        if (tizentvwasm.ElementaryMediaTrack.prototype.hasOwnProperty(
+            'sessionId')) {
+          return {
+            name: 'ElementaryMediaStreamSource',
+            version: '0.9',
+            apiLevels: [1]
+          };
+        } else {
+          return {
+            name: 'ElementaryMediaStreamSource',
+            version: '0.1',
+            apiLevels: [0]
+          };
+        }
+      }
+      return null;
+    },
+
+    getLegacyWasmSocketsVersion: function() {
+      return {
+        name: 'TizenSockets',
+        version: '1.0',
+        apiLevels: [1]
+      };
+    },
   },
 
   TizenTVWasm_GetAvailableApis__deps: ['$TIZENTVWASM'],
@@ -24,13 +52,16 @@ const LibraryTizenTVWasm = {
       console.error('Not a TizenTV device?');
       return;
     }
-    tizentvwasm.availableApis.forEach(function(apiInfo) {
+
+    const addResult = function(apiInfo) {
+      if (!apiInfo) return;
+
       const namePtr = TIZENTVWASM.allocCStr(apiInfo.name);
       const versionPtr = TIZENTVWASM.allocCStr(apiInfo.version);
       const levelsPtr = _malloc(apiInfo.apiLevels.byteLength);
       try {
         for (var i = 0; i != apiInfo.apiLevels.length; i++) {
-          setValue(levelsPtr + i, apiInfo.apiLevels[i], 'i32');
+          setValue(levelsPtr + (i * 4), apiInfo.apiLevels[i], 'i32');
         }
         dynCall('viiiii', callback, [
           namePtr, versionPtr, levelsPtr, apiInfo.apiLevels.length, userData
@@ -42,7 +73,14 @@ const LibraryTizenTVWasm = {
         _free(versionPtr);
         _free(levelsPtr);
       }
-    });
+    };
+
+    if (tizentvwasm.availableApis === undefined) {
+      addResult(TIZENTVWASM.getLegacyWasmPlayerVersion());
+      addResult(TIZENTVWASM.getLegacyWasmSocketsVersion());
+    } else {
+      tizentvwasm.availableApis.forEach(addResult);
+    }
   },
 
   TizenTVWasm_GetSupportedInstructions__deps: ['$TIZENTVWASM'],
@@ -72,7 +110,24 @@ const LibraryTizenTVWasm = {
       return 0;
     }
     const apiName = UTF8ToString(apiNamePtr);
-    return (tizentvwasm.isApiSupported(apiName, apiLevel) ? 1 : 0);
+    if (tizentvwasm.isApiSupported) {
+      return (tizentvwasm.isApiSupported(apiName, apiLevel) ? 1 : 0);
+    } else {
+      const legacyApis = [];
+      if (TIZENTVWASM.getLegacyWasmPlayerVersion()) {
+        legacyApis.push(TIZENTVWASM.getLegacyWasmPlayerVersion());
+      }
+      if (TIZENTVWASM.getLegacyWasmSocketsVersion()) {
+        legacyApis.push(TIZENTVWASM.getLegacyWasmSocketsVersion());
+      }
+
+      for (const api of legacyApis) {
+        if (api.name == apiName && api.apiLevels.includes(apiLevel)) {
+          return 1;
+        }
+      }
+      return 0;
+    }
   },
 
 };

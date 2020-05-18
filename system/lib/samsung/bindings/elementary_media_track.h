@@ -31,7 +31,7 @@ typedef void (*OnTrackOpenCallback)(void* userData);
 typedef void (*OnTrackClosedCallback)(
     EMSSElementaryMediaTrackCloseReason reason, void* userData);
 typedef void (*OnTrackSeekCallback)(float newTime, void* userData);
-typedef void (*OnSessionIdChangedCallback)(uint32_t sessionId, void* userData);
+typedef void (*OnSessionIdChangedCallback)(int32_t sessionId, void* userData);
 
 extern EMSSOperationResult elementaryMediaTrackRemove(int handle);
 extern EMSSOperationResult elementaryMediaTrackAppendPacket(
@@ -39,9 +39,9 @@ extern EMSSOperationResult elementaryMediaTrackAppendPacket(
 extern EMSSOperationResult elementaryMediaTrackAppendEncryptedPacket(
     int handle, EMSSEncryptedElementaryMediaPacket* packet);
 extern EMSSOperationResult elementaryMediaTrackAppendEndOfTrack(
-    int handle, uint32_t sessionId);
-extern EMSSOperationResult elementaryMediaTrackGetSessionId(
-    int handle, uint32_t* sessionId);
+    int handle, int32_t sessionId);
+extern EMSSOperationResult elementaryMediaTrackGetSessionId(int handle,
+                                                            int32_t* sessionId);
 extern EMSSOperationResult elementaryMediaTrackIsOpen(int handle, bool* isOpen);
 extern EMSSOperationResult elementaryMediaTrackSetMediaKey(
     int handle, int media_key_handle);

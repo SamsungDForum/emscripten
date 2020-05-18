@@ -13,6 +13,7 @@
 
 #include "samsung/wasm/common.h"
 #include "samsung/wasm/elementary_media_track.h"
+#include "samsung/wasm/emss_version_info.h"
 
 namespace samsung {
 namespace wasm {
@@ -349,6 +350,7 @@ class ElementaryMediaStreamSource final {
  private:
   int handle_;
   std::unique_ptr<char, decltype(&std::free)> url_;
+  EmssVersionInfo version_info_;
 };
 
 }  // namespace wasm

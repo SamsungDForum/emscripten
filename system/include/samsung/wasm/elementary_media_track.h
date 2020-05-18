@@ -9,7 +9,9 @@
 #include <cstdint>
 
 #include "samsung/wasm/common.h"
+#include "samsung/wasm/emss_version_info.h"
 #include "samsung/wasm/operation_result.h"
+#include "samsung/wasm/session_id.h"
 
 namespace samsung {
 namespace wasm {
@@ -107,7 +109,7 @@ class ElementaryMediaTrack final {
   /// <code>operation_result</code> field set to
   /// <code>OperationResult::kSuccess</code> on success, otherwise a code
   /// describing the error.
-  Result<void> AppendEndOfTrack(uint32_t session_id);
+  Result<void> AppendEndOfTrack(SessionId session_id);
 
   /// Sets a listener to receive updates about this track's state changes. Only
   /// one listener can be set, setting another listner causes an error.
@@ -125,20 +127,23 @@ class ElementaryMediaTrack final {
   /// @sa ElementaryMediaTrackListener
   Result<void> SetListener(ElementaryMediaTrackListener* listener);
 
-  /// Returns id of the current active session. This should be used sparingly,
-  /// because it blocks the backend. For updates on session id
-  /// using <code>ElementaryMediaTrackListener::OnSessionIdChanged</code> is the
-  /// recommended way.
+  /// Returns id of the currently active session.
   ///
-  /// @return <code>Result\<::Seconds\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> and a valid
-  /// <code>uint32_t</code> identifying current session
-  /// on success, otherwise a code describing the error.
+  /// @remarks
+  /// This should be used sparingly, because calling this method can be slow.
+  /// It's recommended to obtain an initial value of <code>session_id</code>
+  /// using <code>GetSessionId()</code> and receive further updates with the
+  /// @sa ElementaryMediaTrackListener::OnSessionIdChanged() event.
   ///
+  /// @return <code>Result\<::SessionId\></code> with the <code>operation_result
+  /// </code> field set to <code>OperationResult::kSuccess</code> and a valid
+  /// <code>SessionId</code> identifying the current session on a success,
+  /// otherwise a code describing an error.
+  ///
+  /// @sa SessionId
   /// @sa ElementaryMediaPacket::session_id
   /// @sa ElementaryMediaTrackListener::OnSessionIdChanged
-  Result<uint32_t> GetSessionId() const;
+  Result<SessionId> GetSessionId() const;
 
   /// Returns current state of this track.
   /// <br>
@@ -173,9 +178,11 @@ class ElementaryMediaTrack final {
   Result<void> SetMediaKey(MediaKey* key);
 
  private:
-  explicit ElementaryMediaTrack(int handle);
+  explicit ElementaryMediaTrack(int handle, EmssVersionInfo version_info);
 
   int handle_;
+
+  EmssVersionInfo version_info_;
 
   // access to handle_
   friend class ElementaryMediaStreamSource;

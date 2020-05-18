@@ -51,17 +51,20 @@ void OnPlaybackPositionChangedListenerCallback(float new_time,
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(Mode mode)
     : handle_(EMSSCreate(static_cast<EMSSMode>(mode))),
-      url_(CAPICall<char*>(EMSSCreateObjectURL, handle_).value, std::free) {}
+      url_(CAPICall<char*>(EMSSCreateObjectURL, handle_).value, std::free),
+      version_info_(EmssVersionInfo::Create()) {}
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(
     ElementaryMediaStreamSource&& other)
     : handle_(std::exchange(other.handle_, -1)),
-      url_(std::exchange(other.url_, {nullptr, std::free})) {}
+      url_(std::exchange(other.url_, {nullptr, std::free})),
+      version_info_(other.version_info_) {}
 
 ElementaryMediaStreamSource& ElementaryMediaStreamSource::operator=(
     ElementaryMediaStreamSource&& other) {
   handle_ = std::exchange(other.handle_, -1);
   url_ = std::exchange(other.url_, {nullptr, std::free});
+  version_info_ = other.version_info_;
   return *this;
 }
 
@@ -82,7 +85,8 @@ Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
   const auto track_id =
       result.operation_result == OperationResult::kSuccess ? result.value : -1;
-  return {ElementaryMediaTrack(track_id), result.operation_result};
+  return {ElementaryMediaTrack(track_id, version_info_),
+          result.operation_result};
 }
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
@@ -91,7 +95,8 @@ Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
   const auto result = CAPICall<int>(EMSSAddVideoTrack, handle_, &CAPIConfig);
   const auto track_id =
       result.operation_result == OperationResult::kSuccess ? result.value : -1;
-  return {ElementaryMediaTrack(track_id), result.operation_result};
+  return {ElementaryMediaTrack(track_id, version_info_),
+          result.operation_result};
 }
 
 Result<void> ElementaryMediaStreamSource::RemoveTrack(

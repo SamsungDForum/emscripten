@@ -10,6 +10,7 @@
 #include <cstdint>
 
 #include "samsung/wasm/common.h"
+#include "samsung/wasm/session_id.h"
 
 namespace samsung {
 namespace wasm {
@@ -59,23 +60,30 @@ struct ElementaryMediaPacket {
   uint32_t framerate_den;
 
   /// Id of a session the packet belongs to. Used to differentiate packets
-  /// before a seek and packets after a seek.
-  /// <br>
-  /// Session mechanism is meant to help working with seek. In a multithreaded
-  /// application, it's expected to have a separate thread for packet
-  /// appending. That thread may receive information about seek with some delay,
-  /// and continue appending packets with old (pre-seek) PTSes. Such behaviour
-  /// can cause all sorts of problems during seek.
-  /// <br>
-  /// Thanks to <code>session_id</code> mechanism backend can still receive
-  /// pre-seek packets and continue to drop them for as long as necessary.
-  /// These appends return errors, but it's okay to ignore them. The application
-  /// should listen to
-  /// <code>ElementaryMediaTrackListener::OnSessionIdChanged</code> and append
-  /// post-seek packets with new session_id after this event fired.
+  /// sent to @ref ElementaryMediaTrack before it closes and after it reopens.
+  /// This is useful for multithreaded Apps in some playback scenarios (e.g when
+  /// seeking or App multitasking happens).
   ///
-  /// @sa ElementaryMediaTrackListener::OnSessionIdChanged
-  uint32_t session_id;
+  /// @remarks
+  /// When a packet with an old <code>session_id</code> value is sent/processed
+  /// by backend, it will be ignored. Such appends return errors, but it's okay
+  /// to ignore them.
+  ///
+  /// @remarks
+  /// The application should listen to
+  /// @ref ElementaryMediaTrackListener::OnSessionIdChanged() and append
+  /// post-open packets with a new session_id after this event fired.
+  ///
+  /// @remarks
+  /// Apps that operate on a main thread only can ignore this mechanism. In
+  /// such case, <code>session_id</code> should be set to @ref kIgnoreSessionId.
+  ///
+  /// @sa SessionId
+  /// @sa ElementaryMediaTrack::GetSessionId()
+  /// @sa ElementaryMediaTrackListener::OnSessionIdChanged()
+  /// @sa ElementaryMediaTrackListener::OnTrackOpen()
+  /// @sa ElementaryMediaTrackListener::OnTrackClose()
+  SessionId session_id;
 };
 
 }  // namespace wasm

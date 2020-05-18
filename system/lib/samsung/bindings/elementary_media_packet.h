@@ -32,7 +32,7 @@ typedef struct EMSSElementaryMediaPacket {
   uint32_t height;
   uint32_t framerate_num;
   uint32_t framerate_den;
-  uint32_t session_id;
+  int32_t session_id;
 } EMSSElementaryMediaPacket;
 
 typedef struct EMSSEncryptedElementaryMediaPacket {

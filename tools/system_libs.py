@@ -1316,15 +1316,20 @@ class lib_tizen_emss(CXXLibrary):
     '-std=c++14',
     '-isystem' + shared.path_from_root('system', 'lib'),
   ]
-  depends = ['libc++abi']
+  depends = [
+      'libc++abi',
+      'lib_tizen_tv_wasm',
+  ]
 
   def get_files(self):
     return [
       shared.path_from_root('system', 'lib', 'samsung', 'bindings', 'emss_operation_result.cc'),
       shared.path_from_root('system', 'lib', 'samsung', 'html', 'html_media_element.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'emss_version_info.cc'),
       shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'elementary_media_stream_source.cc'),
       shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'elementary_media_track.cc'),
       shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'media_key.cc'),
+      shared.path_from_root('system', 'lib', 'samsung', 'wasm', 'session_id.cc'),
     ]
 
 

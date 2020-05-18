@@ -80,16 +80,21 @@ void OnSeekListenerCallback(float new_time, void* user_data) {
 namespace samsung {
 namespace wasm {
 
-ElementaryMediaTrack::ElementaryMediaTrack() : ElementaryMediaTrack(-1) {}
+ElementaryMediaTrack::ElementaryMediaTrack()
+    : ElementaryMediaTrack(-1, EmssVersionInfo::Create()) {}
 
-ElementaryMediaTrack::ElementaryMediaTrack(int handle) : handle_(handle) {}
+ElementaryMediaTrack::ElementaryMediaTrack(int handle,
+                                           EmssVersionInfo version_info)
+    : handle_(handle), version_info_(version_info) {}
 
 ElementaryMediaTrack::ElementaryMediaTrack(ElementaryMediaTrack&& other)
-    : handle_(std::exchange(other.handle_, -1)) {}
+    : handle_(std::exchange(other.handle_, -1)),
+      version_info_(other.version_info_) {}
 
 ElementaryMediaTrack& ElementaryMediaTrack::operator=(
     ElementaryMediaTrack&& other) {
   handle_ = std::exchange(other.handle_, -1);
+  version_info_ = other.version_info_;
   return *this;
 }
 
@@ -104,6 +109,12 @@ bool ElementaryMediaTrack::IsValid() const { return IsHandleValid(handle_); }
 Result<void> ElementaryMediaTrack::AppendPacket(
     const samsung::wasm::ElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
+
+  if (version_info_.has_legacy_emss) {
+    // Legacy EMSS didn't support session_id concept.
+    capi_packet.session_id = kIgnoreSessionId;
+  }
+
   return CAPICall<void>(elementaryMediaTrackAppendPacket, handle_,
                         &capi_packet);
 }
@@ -111,17 +122,32 @@ Result<void> ElementaryMediaTrack::AppendPacket(
 Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
     const EncryptedElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
+
+  if (version_info_.has_legacy_emss) {
+    // Legacy EMSS didn't support session_id concept.
+    capi_packet.base_packet.session_id = kIgnoreSessionId;
+  }
+
   return CAPICall<void>(elementaryMediaTrackAppendEncryptedPacket, handle_,
                         &capi_packet);
 }
 
-Result<void> ElementaryMediaTrack::AppendEndOfTrack(uint32_t session_id) {
+Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId app_session_id) {
+  // Legacy EMSS didn't support session_id concept.
+  auto session_id =
+      (version_info_.has_legacy_emss ? kIgnoreSessionId : app_session_id);
   return CAPICall<void>(elementaryMediaTrackAppendEndOfTrack, handle_,
                         session_id);
 }
 
-Result<uint32_t> ElementaryMediaTrack::GetSessionId() const {
-  return CAPICall<uint32_t>(elementaryMediaTrackGetSessionId, handle_);
+Result<SessionId> ElementaryMediaTrack::GetSessionId() const {
+  if (version_info_.has_legacy_emss) {
+    Result<SessionId> result;
+    result.operation_result = OperationResult::kSuccess;
+    result.value = kIgnoreSessionId;
+    return result;
+  }
+  return CAPICall<SessionId>(elementaryMediaTrackGetSessionId, handle_);
 }
 
 Result<bool> ElementaryMediaTrack::IsOpen() const {
@@ -144,7 +170,7 @@ Result<void> ElementaryMediaTrack::SetListener(
                listener);
   SET_LISTENER(
       elementaryMediaTrackSetOnSessionIdChanged, handle_,
-      ListenerCallback<ElementaryMediaTrackListener, uint32_t,
+      ListenerCallback<ElementaryMediaTrackListener, SessionId,
                        &ElementaryMediaTrackListener::OnSessionIdChanged>,
       listener);
   return {OperationResult::kSuccess};

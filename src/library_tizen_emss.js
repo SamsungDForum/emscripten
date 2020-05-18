@@ -62,6 +62,9 @@ const LibraryTizenEmss = {
   $EmssCommon__postset: 'EmssCommon.init();',
   $EmssCommon: {
     init: function() {
+      // Matches samsung::wasm::kIgnoreSessionId
+      const IGNORE_SESSION_ID = -1;
+
       // Matches samsung::wasm::OperationResult
       const Result = Object.freeze({
         SUCCESS: 0,
@@ -128,7 +131,7 @@ const LibraryTizenEmss = {
         _callFunction: function(handleMap, handle, name, ...args) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.error(`Invalid handle: '${handle}'`);
+            console.error(`${name}(): invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
 
@@ -141,7 +144,7 @@ const LibraryTizenEmss = {
             onFinishedCallback, userData, name, ...args) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(`${name}(): invalid handle: '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           obj[name](...args)
@@ -157,7 +160,7 @@ const LibraryTizenEmss = {
         _getProperty: function(handleMap, handle, property, retPtr, type) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(`property ${property}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           setValue(retPtr, obj[property], type);
@@ -166,7 +169,7 @@ const LibraryTizenEmss = {
         _setProperty: function(handleMap, handle, property, value) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(`property ${property}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           try {
@@ -272,15 +275,20 @@ const LibraryTizenEmss = {
               'ptr',
               'CStructsOffsets.ElementaryMediaPacket.isKeyFrame',
               'i8') }}},
-            sessionId: {{{ makeGetValue(
-              'ptr',
-              'CStructsOffsets.ElementaryMediaPacket.sessionId',
-              'i32') }}},
             isEncrypted: {{{ makeGetValue(
               'ptr',
               'CStructsOffsets.ElementaryMediaPacket.isEncrypted',
               'i8') }}},
           };
+
+          const sessionId = {{{ makeGetValue(
+            'ptr',
+            'CStructsOffsets.ElementaryMediaPacket.sessionId',
+            'i32') }}};
+
+          if (sessionId !== IGNORE_SESSION_ID) {
+            config.sessionId = sessionId;
+          }
 
           const framerateDen = {{{ makeGetValue(
               'ptr',
@@ -351,11 +359,12 @@ const LibraryTizenEmss = {
         _setListener: function(namespace, handle, eventName, eventHandler) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(
+                `Set listener ${eventName}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           if (eventName in namespace.listenerMap[handle]) {
-            console.warn(`Event already set: '${eventName}'`);
+            console.warn(`Listener already set: '${eventName}'`);
             return Result.LISTENER_ALREADY_SET;
           }
           namespace.listenerMap[handle][eventName] = eventHandler;
@@ -365,7 +374,8 @@ const LibraryTizenEmss = {
         _unsetListener: function(namespace, handle, eventName) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(
+              `Unset listener ${eventName}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           if (!(eventName in namespace.listenerMap[handle])) {
@@ -380,7 +390,7 @@ const LibraryTizenEmss = {
         _clearListeners: function(namespace, handle) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
-            console.warn(`Invalid handle: '${handle}'`);
+            console.warn(`clear listeners: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
           const listeners = namespace.listenerMap[handle];
@@ -631,7 +641,7 @@ const LibraryTizenEmss = {
   mediaKeyRemove: function(handle) {
     const obj = EmssMediaKey.handleMap[handle];
     if (!obj) {
-      console.error(`Invalid handle: '${handle}'`);
+      console.error(`remove media key: invalid handle = '${handle}'`);
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -1319,8 +1329,12 @@ const LibraryTizenEmss = {
   elementaryMediaTrackAppendEndOfTrack__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
   elementaryMediaTrackAppendEndOfTrack: function(handle, sessionId) {
     try {
-      tizentvwasm.SideThreadElementaryMediaTrack.appendEndOfTrackSync(
-          handle, sessionId);
+      if (sessionId !== EmssCommon.IGNORE_SESSION_ID) {
+        tizentvwasm.SideThreadElementaryMediaTrack.appendEndOfTrackSync(
+            handle, sessionId);
+      } else {
+        tizentvwasm.SideThreadElementaryMediaTrack.appendEndOfTrackSync(handle);
+      }
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
       return EmssCommon.Result.FAILED;

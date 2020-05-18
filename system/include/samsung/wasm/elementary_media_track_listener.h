@@ -64,21 +64,20 @@ class ElementaryMediaTrackListener {
   /// @param[in] new_time Time to which the seek is being performed.
   virtual void OnSeek(Seconds /*new_time*/) {}
 
-  /// Fired when id of the current session is changed, which happens during
-  /// seek.
-  /// <br>
+  /// Fired when id of the current session is changed, which happens when track
+  /// is closed.
+  ///
+  /// @remarks
   /// This event allows application to efficiently track sessions (as opposed
-  /// to <code>ElementaryMediaTrack::GetSessionId</code>) and to differentiate
-  /// packets before a seek (that should be dropped) and packets after a seek.
-  /// Appending a packet with wrong
-  /// <code>ElementaryMediaPacket::session_id</code> causes an error and the
-  /// packet to be dropped.
+  /// to @ref ElementaryMediaTrack::GetSessionId(), which should be used only
+  /// to obtain an initial value of <code>session_id</code>).
   ///
   /// @param[in] session_id Id of new session.
   ///
+  /// @sa SessionId
   /// @sa ElementaryMediaPacket::session_id
   /// @sa ElementaryMediaTrackListener::OnSeek
-  virtual void OnSessionIdChanged(uint32_t /*session_id*/) {}
+  virtual void OnSessionIdChanged(SessionId /*session_id*/) {}
 };
 
 }  // namespace wasm

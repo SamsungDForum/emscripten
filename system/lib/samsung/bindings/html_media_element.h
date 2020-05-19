@@ -22,6 +22,7 @@ typedef enum HTMLMediaElementAsyncResult {
 } HTMLMediaElementAsyncResult;
 
 typedef void (*OnEventCallback)(void* userData);
+typedef void (*RegisterOnTimeUpdateEMSSEventCallback)(void*, void*);
 
 extern int mediaElementById(const char* id);
 extern EMSSOperationResult mediaElementRemove(int handle);
@@ -95,6 +96,13 @@ extern EMSSOperationResult mediaElementSetOnWaiting(int handle,
                                                     OnEventCallback callback,
                                                     void* userData);
 extern EMSSOperationResult mediaElementUnsetOnWaiting(int handle);
+
+// Fallback for EMSSSetOnPlaybackPositionChanged on legacy product
+extern EMSSOperationResult mediaElementRegisterOnTimeUpdateEMSS(
+    int handle, RegisterOnTimeUpdateEMSSEventCallback callback, void* listener,
+    void* element);
+
+extern EMSSOperationResult mediaElementUnregisterOnTimeUpdateEMSS(int handle);
 
 #ifdef __cplusplus
 }

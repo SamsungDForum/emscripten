@@ -12,6 +12,7 @@
 #include "samsung/bindings/elementary_media_stream_source.h"
 #include "samsung/bindings/elementary_video_track_config.h"
 #include "samsung/bindings/emss_operation_result.h"
+#include "samsung/html/html_media_element.h"
 #include "samsung/wasm/elementary_audio_track_config.h"
 #include "samsung/wasm/elementary_media_stream_source_listener.h"
 #include "samsung/wasm/elementary_video_track_config.h"
@@ -51,24 +52,32 @@ void OnPlaybackPositionChangedListenerCallback(float new_time,
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(Mode mode)
     : handle_(EMSSCreate(static_cast<EMSSMode>(mode))),
+      html_media_element_(nullptr),
+      listener_(nullptr),
       url_(CAPICall<char*>(EMSSCreateObjectURL, handle_).value, std::free),
       version_info_(EmssVersionInfo::Create()) {}
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(
     ElementaryMediaStreamSource&& other)
     : handle_(std::exchange(other.handle_, -1)),
+      html_media_element_(std::exchange(other.html_media_element_, nullptr)),
+      listener_(nullptr),
       url_(std::exchange(other.url_, {nullptr, std::free})),
       version_info_(other.version_info_) {}
 
 ElementaryMediaStreamSource& ElementaryMediaStreamSource::operator=(
     ElementaryMediaStreamSource&& other) {
   handle_ = std::exchange(other.handle_, -1);
+  html_media_element_ = std::exchange(other.html_media_element_, nullptr);
+  listener_ = std::exchange(other.listener_, nullptr);
   url_ = std::exchange(other.url_, {nullptr, std::free});
   version_info_ = other.version_info_;
   return *this;
 }
 
 ElementaryMediaStreamSource::~ElementaryMediaStreamSource() {
+  SetHTMLMediaElement(nullptr);
+
   if (IsValid()) {
     EMSSRemove(handle_);
     EMSSRevokeObjectURL(url_.get());
@@ -172,9 +181,29 @@ Result<void> ElementaryMediaStreamSource::SetListener(
       ListenerCallback<ElementaryMediaStreamSourceListener,
                        &ElementaryMediaStreamSourceListener::OnSourceEnded>,
       listener);
-  SET_LISTENER(EMSSSetOnPlaybackPositionChanged, handle_,
-               OnPlaybackPositionChangedListenerCallback, listener);
+
+  if (version_info_.has_legacy_emss) {
+    if (html_media_element_)
+      html_media_element_->RegisterOnTimeUpdateEMSS(listener);
+
+    listener_ = listener;
+  } else {
+    SET_LISTENER(EMSSSetOnPlaybackPositionChanged, handle_,
+                 OnPlaybackPositionChangedListenerCallback, listener);
+  }
   return {OperationResult::kSuccess};
+}
+
+void ElementaryMediaStreamSource::SetHTMLMediaElement(
+    html::HTMLMediaElement* html_media_element) {
+  if (version_info_.has_legacy_emss && listener_) {
+    if (html_media_element)
+      html_media_element->RegisterOnTimeUpdateEMSS(listener_);
+    else if (html_media_element_)
+      html_media_element_->UnregisterOnTimeUpdateEMSS();
+  }
+
+  html_media_element_ = html_media_element;
 }
 
 }  // namespace wasm

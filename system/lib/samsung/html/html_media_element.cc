@@ -5,7 +5,6 @@
 
 #include "samsung/html/html_media_element.h"
 
-#include <iostream>
 #include <utility>
 
 #include "samsung/bindings/common.h"
@@ -14,19 +13,39 @@
 #include "samsung/bindings/html_media_element.h"
 #include "samsung/html/html_media_element_listener.h"
 #include "samsung/wasm/elementary_media_stream_source.h"
+#include "samsung/wasm/elementary_media_stream_source_listener.h"
 #include "samsung/wasm/media_key.h"
 
 namespace samsung {
 namespace html {
 
+namespace {
+
+void OnTimeUpdateEMSSCallback(void* user_data, void* element) {
+  auto* listener =
+      static_cast<wasm::ElementaryMediaStreamSourceListener*>(user_data);
+
+  const auto* html_media_element = static_cast<HTMLMediaElement*>(element);
+
+  if (!html_media_element->HasSrc()) return;
+
+  auto new_time = html_media_element->GetCurrentTime();
+
+  if (new_time) listener->OnPlaybackPositionChanged(new_time.value);
+}
+
+}  // namespace
+
 HTMLMediaElement::HTMLMediaElement(const char* id)
-    : handle_(mediaElementById(id)) {}
+    : handle_(mediaElementById(id)), source_(nullptr) {}
 
 HTMLMediaElement::HTMLMediaElement(HTMLMediaElement&& other)
-    : handle_(std::exchange(other.handle_, -1)) {}
+    : handle_(std::exchange(other.handle_, -1)),
+      source_(std::exchange(other.source_, nullptr)) {}
 
 HTMLMediaElement& HTMLMediaElement::operator=(HTMLMediaElement&& other) {
   handle_ = std::exchange(other.handle_, -1);
+  source_ = std::exchange(other.source_, nullptr);
   return *this;
 }
 
@@ -90,11 +109,18 @@ wasm::Result<std::string> HTMLMediaElement::GetSrc() const {
   return {ret, wasm::OperationResult::kSuccess};
 }
 
+bool HTMLMediaElement::HasSrc() const { return source_; }
+
 wasm::Result<void> HTMLMediaElement::SetSrc(
     wasm::ElementaryMediaStreamSource* source) {
   if (!source) {
+    source_->SetHTMLMediaElement(nullptr);
+    source_ = nullptr;
     return CAPICall<void>(mediaElementSetSrc, handle_, "");
   }
+
+  source_ = source;
+  source_->SetHTMLMediaElement(this);
   return CAPICall<void>(mediaElementSetSrc, handle_, source->GetURL());
 }
 
@@ -163,6 +189,18 @@ wasm::Result<void> HTMLMediaElement::SetListener(
                                 &HTMLMediaElementListener::OnWaiting>,
                listener);
   return {wasm::OperationResult::kSuccess};
+}
+
+wasm::Result<void> HTMLMediaElement::RegisterOnTimeUpdateEMSS(
+    wasm::ElementaryMediaStreamSourceListener* listener) {
+  SET_LISTENER(mediaElementRegisterOnTimeUpdateEMSS, handle_,
+               OnTimeUpdateEMSSCallback, listener, this);
+
+  return {wasm::OperationResult::kSuccess};
+}
+
+void HTMLMediaElement::UnregisterOnTimeUpdateEMSS() {
+  CAPICall<void>(mediaElementUnregisterOnTimeUpdateEMSS, handle_);
 }
 
 }  // namespace html

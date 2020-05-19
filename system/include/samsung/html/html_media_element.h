@@ -17,6 +17,7 @@ namespace samsung {
 namespace wasm {
 
 class ElementaryMediaStreamSource;
+class ElementaryMediaStreamSourceListener;
 
 }  // namespace wasm
 
@@ -97,6 +98,8 @@ class HTMLMediaElement final {
 
   wasm::Result<std::string> GetSrc() const;
 
+  bool HasSrc() const;
+
   /// Sets <code>wasm::ElementaryMediaStreamSource</code> object as the current
   /// source of the playback. This is equivalent of
   /// @code{.js}
@@ -138,7 +141,14 @@ class HTMLMediaElement final {
   wasm::Result<void> SetListener(HTMLMediaElementListener* listener);
 
  private:
+  wasm::Result<void> RegisterOnTimeUpdateEMSS(
+      wasm::ElementaryMediaStreamSourceListener*);
+  void UnregisterOnTimeUpdateEMSS();
+
+  wasm::ElementaryMediaStreamSource* source_;
   int handle_;
+
+  friend class wasm::ElementaryMediaStreamSource;
 };
 
 }  // namespace html

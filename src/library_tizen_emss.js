@@ -862,6 +862,46 @@ const LibraryTizenEmss = {
     return EmssCommon.Result.SUCCESS;
   },
 
+  mediaElementRegisterOnTimeUpdateEMSS__deps: ['$EmssCommon', '$WasmHTMLMediaElement'],
+  mediaElementRegisterOnTimeUpdateEMSS__proxy: 'sync',
+  mediaElementRegisterOnTimeUpdateEMSS: function(handle, eventHandler, listener, element) {
+    const mediaElement = WasmHTMLMediaElement.handleMap[handle];
+    if (!mediaElement) {
+      console.warn(`No such media element: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+
+    if (mediaElement.emssTimeUpdateListener) {
+      console.warn(`Listener already set for media element: '${handle}'`);
+      return EmssCommon.Result.LISTENER_ALREADY_SET;
+    }
+
+    const callback = (event) => {
+        {{{ makeDynCall('vii') }}} (eventHandler, listener, element);
+    };
+
+    mediaElement.emssTimeUpdateListener = callback;
+    mediaElement.addEventListener('timeupdate', callback);
+  },
+
+  mediaElementUnregisterOnTimeUpdateEMSS__deps: ['$EmssCommon', '$WasmHTMLMediaElement'],
+  mediaElementUnregisterOnTimeUpdateEMSS__proxy: 'sync',
+  mediaElementUnregisterOnTimeUpdateEMSS: function(handle) {
+    const mediaElement = WasmHTMLMediaElement.handleMap[handle];
+    if (!mediaElement) {
+      console.warn(`No such media element: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+
+    if (!mediaElement.emssTimeUpdateListener) {
+      console.warn(`Listener not registered for media element: '${handle}'`);
+      return EmssCommon.Result.NO_SUCH_LISTENER;
+    }
+
+    mediaElement.removeEventListener('timeupdate', mediaElement.emssTimeUpdateListener);
+    delete mediaElement.emssTimeUpdateListener;
+  },
+
   mediaElementPlay__deps: ['$WasmHTMLMediaElement'],
   mediaElementPlay__proxy: 'sync',
   mediaElementPlay: function(handle, onFinished, userData) {

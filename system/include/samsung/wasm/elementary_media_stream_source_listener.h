@@ -42,8 +42,12 @@ class ElementaryMediaStreamSourceListener {
 
   /// Called when current playback position changes. This is preferred method
   /// of informing the app about playback position over
-  /// <code>html::HTMLMediaElementListener::OnTimeUpdate</code> as it behaves
-  /// consistently during seek.
+  /// <code>html::HTMLMediaElementListener::OnTimeUpdate</code>.
+  ///
+  /// @remarks
+  /// If <code>EmssVersionInfo.has_legacy_emss</code> is <code>true</code> (API
+  /// version 0 is used), this event behaves the same way as the <code>
+  /// html::HTMLMediaElementListener::OnTimeUpdate()</code> event.
   ///
   /// @param[in] new_time New playback position.
   virtual void OnPlaybackPositionChanged(Seconds /*new_time*/) {}

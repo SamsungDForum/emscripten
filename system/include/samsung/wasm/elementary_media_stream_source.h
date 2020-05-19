@@ -16,6 +16,11 @@
 #include "samsung/wasm/emss_version_info.h"
 
 namespace samsung {
+
+namespace html {
+class HTMLMediaElement;
+}  // namespace html
+
 namespace wasm {
 
 class ElementaryMediaStreamSourceListener;
@@ -348,9 +353,15 @@ class ElementaryMediaStreamSource final {
   const char* GetURL() const;
 
  private:
+  void SetHTMLMediaElement(html::HTMLMediaElement*);
+
   int handle_;
+  html::HTMLMediaElement* html_media_element_;
+  ElementaryMediaStreamSourceListener* listener_;
   std::unique_ptr<char, decltype(&std::free)> url_;
   EmssVersionInfo version_info_;
+
+  friend class html::HTMLMediaElement;
 };
 
 }  // namespace wasm

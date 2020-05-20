@@ -263,8 +263,7 @@ class ElementaryMediaStreamSource final {
   /// describing the error.
   ///
   /// @sa AsyncResult
-  Result<void> Close(
-      std::function<void(AsyncResult)> on_finished_callback);
+  Result<void> Close(std::function<void(AsyncResult)> on_finished_callback);
 
   /// Starts an asynchronous opening operation. When the operation is done,
   /// the source will be in <code>ReadyState::kOpen</code> state and a
@@ -284,8 +283,7 @@ class ElementaryMediaStreamSource final {
   /// and the application is ready to provide data for the source.
   ///
   /// @sa AsyncResult
-  Result<void> Open(
-      std::function<void(AsyncResult)> on_finished_callback);
+  Result<void> Open(std::function<void(AsyncResult)> on_finished_callback);
 
   /// Returns the duration of the source.
   ///

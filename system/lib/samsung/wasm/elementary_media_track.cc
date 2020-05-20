@@ -49,15 +49,15 @@ namespace {
 
   EMSSElementaryMediaPacket base_packet = PacketToCAPI(
       static_cast<const samsung::wasm::ElementaryMediaPacket&>(packet));
-  return {
-      base_packet,
-      packet.subsamples.size(),
-      reinterpret_cast<const EMSSEncryptedSubsampleDescription*>(
-          packet.subsamples.data()),
-      packet.key_id.size(), packet.key_id.data(),
-      packet.initialization_vector.size(), packet.initialization_vector.data(),
-      static_cast<MediaKeyEncryptionMode>(packet.encryption_mode)
-  };
+  return {base_packet,
+          packet.subsamples.size(),
+          reinterpret_cast<const EMSSEncryptedSubsampleDescription*>(
+              packet.subsamples.data()),
+          packet.key_id.size(),
+          packet.key_id.data(),
+          packet.initialization_vector.size(),
+          packet.initialization_vector.data(),
+          static_cast<MediaKeyEncryptionMode>(packet.encryption_mode)};
 }
 
 void OnTrackClosedListenerCallback(
@@ -99,27 +99,25 @@ ElementaryMediaTrack::~ElementaryMediaTrack() {
   }
 }
 
-bool ElementaryMediaTrack::IsValid() const {
-  return IsHandleValid(handle_);
-}
+bool ElementaryMediaTrack::IsValid() const { return IsHandleValid(handle_); }
 
 Result<void> ElementaryMediaTrack::AppendPacket(
     const samsung::wasm::ElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
-  return CAPICall<void>(elementaryMediaTrackAppendPacket,
-                        handle_, &capi_packet);
+  return CAPICall<void>(elementaryMediaTrackAppendPacket, handle_,
+                        &capi_packet);
 }
 
 Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
     const EncryptedElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
-  return CAPICall<void>(
-      elementaryMediaTrackAppendEncryptedPacket, handle_, &capi_packet);
+  return CAPICall<void>(elementaryMediaTrackAppendEncryptedPacket, handle_,
+                        &capi_packet);
 }
 
 Result<void> ElementaryMediaTrack::AppendEndOfTrack(uint32_t session_id) {
-  return CAPICall<void>(
-      elementaryMediaTrackAppendEndOfTrack, handle_, session_id);
+  return CAPICall<void>(elementaryMediaTrackAppendEndOfTrack, handle_,
+                        session_id);
 }
 
 Result<uint32_t> ElementaryMediaTrack::GetSessionId() const {
@@ -130,35 +128,26 @@ Result<bool> ElementaryMediaTrack::IsOpen() const {
   return CAPICall<bool>(elementaryMediaTrackIsOpen, handle_);
 }
 
-Result<void> ElementaryMediaTrack::SetMediaKey(
-    wasm::MediaKey* key) {
-  return CAPICall<void>(
-      elementaryMediaTrackSetMediaKey, handle_, key->handle_);
+Result<void> ElementaryMediaTrack::SetMediaKey(wasm::MediaKey* key) {
+  return CAPICall<void>(elementaryMediaTrackSetMediaKey, handle_, key->handle_);
 }
 
 Result<void> ElementaryMediaTrack::SetListener(
     ElementaryMediaTrackListener* listener) {
-
   SET_LISTENER(elementaryMediaTrackSetOnTrackOpen, handle_,
-      ListenerCallback<ElementaryMediaTrackListener,
-                       &ElementaryMediaTrackListener::OnTrackOpen>,
+               ListenerCallback<ElementaryMediaTrackListener,
+                                &ElementaryMediaTrackListener::OnTrackOpen>,
+               listener);
+  SET_LISTENER(elementaryMediaTrackSetOnTrackClosed, handle_,
+               OnTrackClosedListenerCallback, listener);
+  SET_LISTENER(elementaryMediaTrackSetOnSeek, handle_, OnSeekListenerCallback,
+               listener);
+  SET_LISTENER(
+      elementaryMediaTrackSetOnSessionIdChanged, handle_,
+      ListenerCallback<ElementaryMediaTrackListener, uint32_t,
+                       &ElementaryMediaTrackListener::OnSessionIdChanged>,
       listener);
-  SET_LISTENER(elementaryMediaTrackSetOnTrackClosed,
-      handle_,
-      OnTrackClosedListenerCallback,
-      listener);
-  SET_LISTENER(elementaryMediaTrackSetOnSeek,
-      handle_,
-      OnSeekListenerCallback,
-      listener);
-  SET_LISTENER(elementaryMediaTrackSetOnSessionIdChanged,
-      handle_,
-      ListenerCallback<
-         ElementaryMediaTrackListener,
-         uint32_t,
-         &ElementaryMediaTrackListener::OnSessionIdChanged>,
-      listener);
-  return { OperationResult::kSuccess };
+  return {OperationResult::kSuccess};
 }
 
 }  // namespace wasm

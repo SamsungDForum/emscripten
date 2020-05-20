@@ -54,7 +54,7 @@ struct Result<void> {
 /// Default duration type used throughout the API.
 using Seconds = std::chrono::duration<double>;
 
-template<class T>
+template <class T>
 Result<T>::operator bool() const noexcept {
   return static_cast<bool>(Result<void>{operation_result});
 }
@@ -63,22 +63,22 @@ inline Result<void>::operator bool() const noexcept {
   return operation_result == OperationResult::kSuccess;
 }
 
-template<class T>
+template <class T>
 T& Result<T>::operator*() {
   return const_cast<T&>(static_cast<const Result<T>*>(this)->operator*());
 }
 
-template<class T>
+template <class T>
 const T& Result<T>::operator*() const {
   return value;
 }
 
-template<class T>
+template <class T>
 T* Result<T>::operator->() {
   return const_cast<T*>(static_cast<const Result<T>*>(this)->operator->());
 }
 
-template<class T>
+template <class T>
 const T* Result<T>::operator->() const {
   return &value;
 }

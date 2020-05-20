@@ -78,8 +78,7 @@ class MediaKey final {
     kUnknownError,               ///< Unknown error.
   };
 
-  using SetupFinishedCallback =
-    std::function<void(AsyncResult, MediaKey)>;
+  using SetupFinishedCallback = std::function<void(AsyncResult, MediaKey)>;
 
   MediaKey(const MediaKey&) = delete;
   MediaKey(MediaKey&& other);
@@ -108,8 +107,8 @@ class MediaKey final {
   /// <code>operation_result</code> field set to
   /// <code>OperationResult::kSuccess</code> on success, otherwise a code
   /// describing the error.
-  static Result<void> SetupEncryption(
-      const DRMConfig& config, SetupFinishedCallback on_finished);
+  static Result<void> SetupEncryption(const DRMConfig& config,
+                                      SetupFinishedCallback on_finished);
 
  private:
   struct AsyncImpl;

@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "samsung/wasm/common.h"
-#include "samsung/wasm/media_key.h"
 #include "samsung/wasm/elementary_media_packet.h"
+#include "samsung/wasm/media_key.h"
 
 namespace samsung {
 namespace wasm {
@@ -42,4 +42,3 @@ struct EncryptedElementaryMediaPacket : public ElementaryMediaPacket {
 }  // namespace samsung
 
 #endif  // INCLUDE_SAMSUNG_WASM_ENCRYPTED_ELEMENTARY_MEDIA_PACKET_H_
-

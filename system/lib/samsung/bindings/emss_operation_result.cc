@@ -24,5 +24,4 @@ const char* EMSSOperationResultToString(EMSSOperationResult result) {
       return "Unknown error";
   }
 }
-
 }

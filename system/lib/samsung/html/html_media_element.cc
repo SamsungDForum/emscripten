@@ -31,13 +31,10 @@ HTMLMediaElement& HTMLMediaElement::operator=(HTMLMediaElement&& other) {
 }
 
 HTMLMediaElement::~HTMLMediaElement() {
-  if (IsValid())
-    mediaElementRemove(handle_);
+  if (IsValid()) mediaElementRemove(handle_);
 }
 
-bool HTMLMediaElement::IsValid() const {
-  return IsHandleValid(handle_);
-}
+bool HTMLMediaElement::IsValid() const { return IsHandleValid(handle_); }
 
 wasm::Result<bool> HTMLMediaElement::IsAutoplay() const {
   return CAPICall<bool>(mediaElementIsAutoplay, handle_);
@@ -49,10 +46,7 @@ wasm::Result<void> HTMLMediaElement::SetAutoplay(bool newAutoplay) {
 
 wasm::Result<wasm::Seconds> HTMLMediaElement::GetCurrentTime() const {
   const auto result = CAPICall<double>(mediaElementGetCurrentTime, handle_);
-  return {
-    wasm::Seconds(result.value),
-    result.operation_result
-  };
+  return {wasm::Seconds(result.value), result.operation_result};
 }
 
 wasm::Result<void> HTMLMediaElement::SetCurrentTime(wasm::Seconds new_time) {
@@ -61,10 +55,7 @@ wasm::Result<void> HTMLMediaElement::SetCurrentTime(wasm::Seconds new_time) {
 
 wasm::Result<wasm::Seconds> HTMLMediaElement::GetDuration() const {
   const auto result = CAPICall<double>(mediaElementGetDuration, handle_);
-  return {
-    wasm::Seconds(result.value),
-    result.operation_result
-  };
+  return {wasm::Seconds(result.value), result.operation_result};
 }
 
 wasm::Result<bool> HTMLMediaElement::IsEnded() const {
@@ -83,23 +74,20 @@ wasm::Result<bool> HTMLMediaElement::IsPaused() const {
   return CAPICall<bool>(mediaElementIsPaused, handle_);
 }
 
-wasm::Result<HTMLMediaElement::ReadyState>
-HTMLMediaElement::GetReadyState() const {
+wasm::Result<HTMLMediaElement::ReadyState> HTMLMediaElement::GetReadyState()
+    const {
   const auto result = CAPICall<int>(mediaElementGetReadyState, handle_);
-  return {
-    static_cast<ReadyState>(result.value),
-    result.operation_result
-  };
+  return {static_cast<ReadyState>(result.value), result.operation_result};
 }
 
 wasm::Result<std::string> HTMLMediaElement::GetSrc() const {
   const auto result = CAPICall<char*>(mediaElementGetSrc, handle_);
   if (result.operation_result != wasm::OperationResult::kSuccess) {
-    return { "", result.operation_result };
+    return {"", result.operation_result};
   }
   std::string ret = result.value;
   free(result.value);
-  return { ret, wasm::OperationResult::kSuccess };
+  return {ret, wasm::OperationResult::kSuccess};
 }
 
 wasm::Result<void> HTMLMediaElement::SetSrc(
@@ -111,11 +99,9 @@ wasm::Result<void> HTMLMediaElement::SetSrc(
 }
 
 wasm::Result<void> HTMLMediaElement::Play(
-    std::function<void(HTMLMediaElement::AsyncResult)>
-    on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult,
-                       HTMLMediaElementAsyncResult>(
-            on_finished_callback, mediaElementPlay, handle_);
+    std::function<void(HTMLMediaElement::AsyncResult)> on_finished_callback) {
+  return CAPIAsyncCall<AsyncResult, HTMLMediaElementAsyncResult>(
+      on_finished_callback, mediaElementPlay, handle_);
 }
 
 wasm::Result<void> HTMLMediaElement::Pause() {
@@ -125,58 +111,58 @@ wasm::Result<void> HTMLMediaElement::Pause() {
 wasm::Result<void> HTMLMediaElement::SetListener(
     HTMLMediaElementListener* listener) {
   SET_LISTENER(mediaElementSetOnTimeUpdate, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnTimeUpdate>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnTimeUpdate>,
+               listener);
   SET_LISTENER(mediaElementSetOnLoadStart, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnLoadStart>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnLoadStart>,
+               listener);
   SET_LISTENER(mediaElementSetOnLoadedMetadata, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnLoadedMetadata>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnLoadedMetadata>,
+               listener);
   SET_LISTENER(mediaElementSetOnLoadedData, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnLoadedData>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnLoadedData>,
+               listener);
   SET_LISTENER(mediaElementSetOnCanPlay, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnCanPlay>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnCanPlay>,
+               listener);
   SET_LISTENER(mediaElementSetOnCanPlayThrough, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnCanPlayThrough>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnCanPlayThrough>,
+               listener);
   SET_LISTENER(mediaElementSetOnEnded, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnEnded>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnEnded>,
+               listener);
   SET_LISTENER(mediaElementSetOnPlaying, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnPlaying>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnPlaying>,
+               listener);
   SET_LISTENER(mediaElementSetOnPlay, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnPlay>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnPlay>,
+               listener);
   SET_LISTENER(mediaElementSetOnSeeking, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnSeeking>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnSeeking>,
+               listener);
   SET_LISTENER(mediaElementSetOnSeeked, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnSeeked>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnSeeked>,
+               listener);
   SET_LISTENER(mediaElementSetOnPause, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnPause>,
-                 listener);
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnPause>,
+               listener);
   SET_LISTENER(mediaElementSetOnWaiting, handle_,
-                 ListenerCallback<HTMLMediaElementListener,
-                                  &HTMLMediaElementListener::OnWaiting>,
-                 listener);
-  return { wasm::OperationResult::kSuccess };
+               ListenerCallback<HTMLMediaElementListener,
+                                &HTMLMediaElementListener::OnWaiting>,
+               listener);
+  return {wasm::OperationResult::kSuccess};
 }
 
 }  // namespace html

@@ -80,26 +80,18 @@ Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config) {
   auto CAPIConfig = ConfigToCAPI(config);
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
-  const auto track_id = result.operation_result == OperationResult::kSuccess
-    ? result.value
-    : -1;
-  return {
-    ElementaryMediaTrack(track_id),
-    result.operation_result
-  };
+  const auto track_id =
+      result.operation_result == OperationResult::kSuccess ? result.value : -1;
+  return {ElementaryMediaTrack(track_id), result.operation_result};
 }
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryVideoTrackConfig& config) {
   auto CAPIConfig = ConfigToCAPI(config);
   const auto result = CAPICall<int>(EMSSAddVideoTrack, handle_, &CAPIConfig);
-  const auto track_id = result.operation_result == OperationResult::kSuccess
-    ? result.value
-    : -1;
-  return {
-    ElementaryMediaTrack(track_id),
-    result.operation_result
-  };
+  const auto track_id =
+      result.operation_result == OperationResult::kSuccess ? result.value : -1;
+  return {ElementaryMediaTrack(track_id), result.operation_result};
 }
 
 Result<void> ElementaryMediaStreamSource::RemoveTrack(
@@ -113,78 +105,71 @@ Result<void> ElementaryMediaStreamSource::Flush() {
 
 Result<void> ElementaryMediaStreamSource::Close(
     std::function<void(ElementaryMediaStreamSource::AsyncResult)>
-    on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(
-       on_finished_callback, EMSSClose, handle_);
+        on_finished_callback) {
+  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(on_finished_callback,
+                                                     EMSSClose, handle_);
 }
 
 Result<void> ElementaryMediaStreamSource::Open(
     std::function<void(ElementaryMediaStreamSource::AsyncResult)>
-    on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(
-      on_finished_callback, EMSSOpen, handle_);
+        on_finished_callback) {
+  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(on_finished_callback,
+                                                     EMSSOpen, handle_);
 }
 
 Result<Seconds> ElementaryMediaStreamSource::GetDuration() const {
   const auto result = CAPICall<double>(EMSSGetDuration, handle_);
-  return {
-    Seconds(result.value),
-    result.operation_result
-  };
+  return {Seconds(result.value), result.operation_result};
 }
 
 Result<void> ElementaryMediaStreamSource::SetDuration(Seconds new_duration) {
   return CAPICall<void>(EMSSSetDuration, handle_, new_duration.count());
 }
 
-Result<ElementaryMediaStreamSource::Mode>
-ElementaryMediaStreamSource::GetMode() const {
+Result<ElementaryMediaStreamSource::Mode> ElementaryMediaStreamSource::GetMode()
+    const {
   const auto result = CAPICall<EMSSMode>(EMSSGetMode, handle_);
-  return {
-    static_cast<Mode>(result.value),
-    result.operation_result
-  };
+  return {static_cast<Mode>(result.value), result.operation_result};
 }
 
 Result<ElementaryMediaStreamSource::ReadyState>
 ElementaryMediaStreamSource::GetReadyState() const {
   const auto result = CAPICall<EMSSReadyState>(EMSSGetReadyState, handle_);
-  return {
-    static_cast<ReadyState>(result.value),
-    result.operation_result
-  };
+  return {static_cast<ReadyState>(result.value), result.operation_result};
 }
 
 const char* ElementaryMediaStreamSource::GetURL() const { return url_.get(); }
 
 Result<void> ElementaryMediaStreamSource::SetListener(
     ElementaryMediaStreamSourceListener* listener) {
-  SET_LISTENER(EMSSSetOnSourceDetached, handle_,
+  SET_LISTENER(
+      EMSSSetOnSourceDetached, handle_,
       ListenerCallback<ElementaryMediaStreamSourceListener,
                        &ElementaryMediaStreamSourceListener::OnSourceDetached>,
       listener);
-  SET_LISTENER(EMSSSetOnSourceClosed, handle_,
+  SET_LISTENER(
+      EMSSSetOnSourceClosed, handle_,
       ListenerCallback<ElementaryMediaStreamSourceListener,
                        &ElementaryMediaStreamSourceListener::OnSourceClosed>,
       listener);
   SET_LISTENER(EMSSSetOnSourceOpenPending, handle_,
-                 ListenerCallback<
-                     ElementaryMediaStreamSourceListener,
-                     &ElementaryMediaStreamSourceListener::OnSourceOpenPending>,
-                 listener);
-  SET_LISTENER(EMSSSetOnSourceOpen, handle_,
-                 ListenerCallback<
-                     ElementaryMediaStreamSourceListener,
-                     &ElementaryMediaStreamSourceListener::OnSourceOpen>,
-                 listener);
-  SET_LISTENER(EMSSSetOnSourceEnded, handle_,
+               ListenerCallback<
+                   ElementaryMediaStreamSourceListener,
+                   &ElementaryMediaStreamSourceListener::OnSourceOpenPending>,
+               listener);
+  SET_LISTENER(
+      EMSSSetOnSourceOpen, handle_,
+      ListenerCallback<ElementaryMediaStreamSourceListener,
+                       &ElementaryMediaStreamSourceListener::OnSourceOpen>,
+      listener);
+  SET_LISTENER(
+      EMSSSetOnSourceEnded, handle_,
       ListenerCallback<ElementaryMediaStreamSourceListener,
                        &ElementaryMediaStreamSourceListener::OnSourceEnded>,
       listener);
   SET_LISTENER(EMSSSetOnPlaybackPositionChanged, handle_,
-      OnPlaybackPositionChangedListenerCallback,
-      listener);
-  return { OperationResult::kSuccess };
+               OnPlaybackPositionChangedListenerCallback, listener);
+  return {OperationResult::kSuccess};
 }
 
 }  // namespace wasm

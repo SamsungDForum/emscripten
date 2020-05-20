@@ -171,6 +171,7 @@ class ElementaryMediaTrack final {
   ///
   /// @sa MediaKey
   Result<void> SetMediaKey(MediaKey* key);
+
  private:
   explicit ElementaryMediaTrack(int handle);
 

@@ -118,8 +118,7 @@ class HTMLMediaElement final {
   /// describing the error.
   wasm::Result<void> SetSrc(wasm::ElementaryMediaStreamSource* source);
 
-  wasm::Result<void> Play(
-      std::function<void(AsyncResult)> finished_callback);
+  wasm::Result<void> Play(std::function<void(AsyncResult)> finished_callback);
   wasm::Result<void> Pause();
 
   /// Sets a listener to receive updates about HTMLMediaElement. Only one

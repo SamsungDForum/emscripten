@@ -72,8 +72,8 @@ static_assert(offsetof(EMSSElementaryMediaPacket, session_id) == 52,
 static_assert(offsetof(EMSSEncryptedElementaryMediaPacket, base_packet) == 0,
               "EMSSEncryptedElementaryMediaPacket::base_packet"
               " has wrong alignment");
-static_assert(offsetof(EMSSEncryptedElementaryMediaPacket,
-                       subsamples_size) == 56,
+static_assert(offsetof(EMSSEncryptedElementaryMediaPacket, subsamples_size) ==
+                  56,
               "EMSSEncryptedElementaryMediaPacket::subsamples_size"
               " has wrong alignment");
 static_assert(offsetof(EMSSEncryptedElementaryMediaPacket, subsamples) == 60,
@@ -92,8 +92,8 @@ static_assert(offsetof(EMSSEncryptedElementaryMediaPacket,
                        initialization_vector) == 76,
               "EMSSEncryptedElementaryMediaPacket::initialization_vector"
               " has wrong alignment");
-static_assert(offsetof(EMSSEncryptedElementaryMediaPacket,
-                       encryption_mode) == 80,
+static_assert(offsetof(EMSSEncryptedElementaryMediaPacket, encryption_mode) ==
+                  80,
               "EMSSEncryptedElementaryMediaPacket::encryption_mode"
               " has wrong alignment");
 

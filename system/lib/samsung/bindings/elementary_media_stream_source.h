@@ -43,8 +43,7 @@ typedef enum EMSSAsyncResult {
 typedef void (*OnEventCallback)(void* userData);
 typedef void (*OnPlaybackPositionChangedCallback)(float newTime,
                                                   void* userData);
-typedef void (*OnOperationDoneCallback)(EMSSAsyncResult result,
-                                        void* userData);
+typedef void (*OnOperationDoneCallback)(EMSSAsyncResult result, void* userData);
 
 extern int EMSSCreate(EMSSMode latencyMode);
 extern EMSSOperationResult EMSSRemove(int handle);

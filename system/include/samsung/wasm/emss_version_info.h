@@ -21,6 +21,8 @@ struct EmssVersionInfo {
   /// Legacy EMSS version indicate an early EMSS version.
   bool has_legacy_emss;
 
+  bool has_video_texture;
+
   /// Queries platform to get EMSS features available on the current device.
   static EmssVersionInfo Create();
 };

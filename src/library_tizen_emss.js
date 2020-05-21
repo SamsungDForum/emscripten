@@ -72,7 +72,8 @@ const LibraryTizenEmss = {
         INVALID_ARGUMENT: 2,
         LISTENER_ALREADY_SET: 3,
         NO_SUCH_LISTENER: 4,
-        FAILED: 5,
+        NOT_SUPPORTED: 5,
+        FAILED: 6,
       });
 
       // C++ -> JS conversion maps (int-indexed arrays)
@@ -944,6 +945,7 @@ const LibraryTizenEmss = {
       const Mode = Object.freeze({
         NORMAL: 0,
         LOW_LATENCY: 1,
+        VIDEO_TEXTURE: 2,
       });
 
       // Matches samsung::wasm::ElementaryMediaStreamSource::ReadyState
@@ -970,6 +972,7 @@ const LibraryTizenEmss = {
       const STR_TO_MODE = new Map([
         ['normal',      Mode.NORMAL      ],
         ['low-latency', Mode.LOW_LATENCY ],
+        ['video-texture', Mode.VIDEO_TEXTURE ],
       ]);
 
       const STR_TO_READY_STATE = new Map([
@@ -1096,7 +1099,7 @@ const LibraryTizenEmss = {
   EMSSCreate__proxy: 'sync',
   EMSSCreate: function(mode) {
     const elementaryMediaStreamSource = new tizentvwasm.ElementaryMediaStreamSource(
-      ['normal', 'low-latency'][mode]);
+      ['normal', 'low-latency', 'video-texture'][mode]);
     const handle = WasmElementaryMediaStreamSource.handleMap.length;
     WasmElementaryMediaStreamSource.handleMap[handle]
       = elementaryMediaStreamSource;
@@ -1280,6 +1283,26 @@ const LibraryTizenEmss = {
         ['unknown',        CloseReason.UNKNOWN         ],
       ]);
 
+      // Matches samsung::wasm::ElementaryMediaTrack::AsyncResult
+      const AsyncResult = Object.freeze({
+        SUCCESS: 0,
+        ALREADY_DESTROYED_ERROR: 1,
+        WEBGL_CONTEXT_NOT_REGISTERED_ERROR: 2,
+        ALREADY_IN_PROGRESS_ERROR: 3,
+        INVALID_DATA_ERROR: 4,
+        NOT_SUPPORTED_ERROR: 5,
+        UNKNOWN_ERROR: 6,
+      });
+
+      // JS -> C++ conversion maps
+      const ERROR_TO_ASYNC_RESULT = new Map([
+        ['Player was already destroyed.',                           AsyncResult.ALREADY_DESTROYED_ERROR            ],
+        ['WebGL rendering context not registered.',                 AsyncResult.WEBGL_CONTEXT_NOT_REGISTERED_ERROR ],
+        ['Player was already destroyed.',                           AsyncResult.ALREADY_DESTROYED_ERROR            ],
+        ['Invalid video texture provided.',                         AsyncResult.INVALID_DATA_ERROR                 ],
+        ['This functionality is available only for video tracks.',  AsyncResult.NOT_SUPPORTED_ERROR                ],
+      ]);
+
       WasmElementaryMediaTrack = {
         handleMap: [],
         listenerMap: {},
@@ -1290,10 +1313,26 @@ const LibraryTizenEmss = {
             name,
             ...args);
         },
-        _setProperty: function(handle, property, value) {
-          return EmssCommon._setProperty(
-            WasmElementaryMediaTrack.handleMap, handle, property, value);
+        _callAsyncFunction: function(
+            handle, onFinished, userData, name, ...args) {
+          return EmssCommon._callAsyncFunction(
+            WasmElementaryMediaTrack.handleMap,
+            handle,
+            WasmElementaryMediaTrack._getAsyncResult,
+            onFinished,
+            userData,
+            name,
+            ...args);
         },
+        _getAsyncResult: function(error) {
+            if (error == null) {
+              return AsyncResult.SUCCESS;
+            }
+            if (ERROR_TO_ASYNC_RESULT.has(error.message)) {
+              return ERROR_TO_ASYNC_RESULT.get(error.message);
+            }
+            return AsyncResult.UNKNOWN_ERROR;
+          },
         _getProperty: function(handle, property, retPtr, type) {
           return EmssCommon._getProperty(
             WasmElementaryMediaTrack.handleMap,
@@ -1302,14 +1341,18 @@ const LibraryTizenEmss = {
             retPtr,
             type);
         },
+        _setListener: function(handle, eventName, eventHandler) {
+          return EmssCommon._setListener(
+            WasmElementaryMediaTrack, handle, eventName, eventHandler);
+        },
+        _setProperty: function(handle, property, value) {
+          return EmssCommon._setProperty(
+            WasmElementaryMediaTrack.handleMap, handle, property, value);
+        },
         _stringToCloseReason: function(input) {
           return (STR_TO_CLOSE_REASON.has(input)
               ? STR_TO_CLOSE_REASON.get(input)
               : CloseReason.UNKNOWN);
-        },
-        _setListener: function(handle, eventName, eventHandler) {
-          return EmssCommon._setListener(
-            WasmElementaryMediaTrack, handle, eventName, eventHandler);
         },
         _unsetListener: function(handle, eventName) {
           return EmssCommon._unsetListener(
@@ -1381,11 +1424,13 @@ const LibraryTizenEmss = {
     }
   },
 
-  elementaryMediaTrackIsOpen__deps: ['$WasmElementaryMediaTrack'],
-  elementaryMediaTrackIsOpen__proxy: 'sync',
-  elementaryMediaTrackIsOpen: function(handle, retPtr) {
-    return WasmElementaryMediaTrack._getProperty(
-      handle, 'isOpen', retPtr, 'i8');
+  elementaryMediaTrackFillTextureWithNextFrame__deps: ['$GL'],
+  elementaryMediaTrackFillTextureWithNextFrame__proxy: 'sync',
+  elementaryMediaTrackFillTextureWithNextFrame: function(
+      handle, textureId, onFinished, userData) {
+    const webGLTexture = GL.textures[textureId];
+    return WasmElementaryMediaTrack._callAsyncFunction(
+      handle, onFinished, userData, 'getPicture', webGLTexture);
   },
 
   elementaryMediaTrackGetSessionId__deps: ['$WasmElementaryMediaTrack'],
@@ -1393,6 +1438,34 @@ const LibraryTizenEmss = {
   elementaryMediaTrackGetSessionId: function(handle, retPtr) {
     return WasmElementaryMediaTrack._getProperty(
       handle, 'sessionId', retPtr, 'i32');
+  },
+
+  elementaryMediaTrackIsOpen__deps: ['$WasmElementaryMediaTrack'],
+  elementaryMediaTrackIsOpen__proxy: 'sync',
+  elementaryMediaTrackIsOpen: function(handle, retPtr) {
+    return WasmElementaryMediaTrack._getProperty(
+      handle, 'isOpen', retPtr, 'i8');
+  },
+
+  elementaryMediaTrackRecycleTexture__deps: ['$GL'],
+  elementaryMediaTrackRecycleTexture__proxy: 'sync',
+  elementaryMediaTrackRecycleTexture: function(handle, textureId) {
+    const webGLTexture = GL.textures[textureId];
+    const videoPicture = {
+      "texture": webGLTexture,
+      "textureTarget": 0x8D65  // GL_TEXTURE_EXTERNAL_OES
+    };
+
+    return WasmElementaryMediaTrack._callFunction(
+      handle, 'recyclePicture', videoPicture);
+  },
+
+  elementaryMediaTrackRegisterCurrentGraphicsContext__deps: ['$GL'],
+  elementaryMediaTrackRegisterCurrentGraphicsContext__proxy: 'sync',
+  elementaryMediaTrackRegisterCurrentGraphicsContext: function(handle) {
+    const webGLContext = GL.currentContext.GLctx;
+    return WasmElementaryMediaTrack._callFunction(
+      handle, 'setWebGLRenderingContext', webGLContext);
   },
 
   elementaryMediaTrackSetMediaKey__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],

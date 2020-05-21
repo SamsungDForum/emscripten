@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 typedef struct EMSSElementaryMediaPacket EMSSElementaryMediaPacket;
+typedef struct EMSSElementaryVideoPicture EMSSElementaryVideoPicture;
 
 typedef enum EMSSElementaryMediaTrackCloseReason {
   ElementaryMediaTrackCloseReasonSourceClosed = 0,
@@ -26,6 +27,16 @@ typedef enum EMSSElementaryMediaTrackCloseReason {
   ElementaryMediaTrackCloseReasonTrackSeeking,
   ElementaryMediaTrackCloseReasonUnknown,
 } EMSSElementaryMediaTrackCloseReason;
+
+typedef enum EMSSElementaryMediaTrackAsyncOperationResult {
+  EMSSElementaryMediaTrackAsyncOperationResultSuccess = 0,
+  EMSSElementaryMediaTrackAsyncOperationResultAlreadyDestroyedError,
+  EMSSElementaryMediaTrackAsyncOperationResultWebGLContextNotRegistedError,
+  EMSSElementaryMediaTrackAsyncOperationResultAlreadyInProgressError,
+  EMSSElementaryMediaTrackAsyncOperationResultInvalidDataError,
+  EMSSElementaryMediaTrackAsyncOperationResultNotSupportedError,
+  EMSSElementaryMediaTrackAsyncOperationResultUnknownError,
+} EMSSElementaryMediaTrackAsyncOperationResult;
 
 typedef void (*OnTrackOpenCallback)(void* userData);
 typedef void (*OnTrackClosedCallback)(
@@ -44,13 +55,24 @@ extern EMSSOperationResult elementaryMediaTrackAppendEncryptedPacket(
 extern EMSSOperationResult elementaryMediaTrackAppendEndOfTrack(
     int handle,
     int32_t sessionId);
+extern EMSSOperationResult elementaryMediaTrackFillTextureWithNextFrame(
+    int handle,
+    uint32_t textureId,
+    void (*finishedCallback)(
+        EMSSElementaryMediaTrackAsyncOperationResult result,
+        void* userData),
+    void* userData);
 extern EMSSOperationResult elementaryMediaTrackGetSessionId(int handle,
                                                             int32_t* sessionId);
 extern EMSSOperationResult elementaryMediaTrackIsOpen(int handle, bool* isOpen);
+extern EMSSOperationResult elementaryMediaTrackRecycleTexture(
+    int handle,
+    uint32_t textureId);
+extern EMSSOperationResult elementaryMediaTrackRegisterCurrentGraphicsContext(
+    int handle);
 extern EMSSOperationResult elementaryMediaTrackSetMediaKey(
     int handle,
     int media_key_handle);
-
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackOpen(
     int handle,
     OnTrackOpenCallback callback,

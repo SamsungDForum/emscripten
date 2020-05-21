@@ -72,7 +72,23 @@ class ElementaryMediaStreamSource final {
     ///   they should be set correctly,
     /// - packets should be tuned for low latency playback (e.g. B-frames are
     ///   not allowed in video streams).
-    kLowLatency
+    kLowLatency,
+
+    /// This mode is appropriate for decoding video into GL texture scenarios.
+    /// <br>
+    /// Pipeline clock is controlled by the platform player. Source will buffer
+    /// packets until they can be rendered according to their pts values and
+    /// they will be decoded and put into GL texture. Application should
+    /// constantly request for new pictures by calling
+    /// <code>ElementaryMediaTrack::FillTextureWithNextFrame()</code> method.
+    /// After texture is rendered, application needs to call
+    /// <code>ElementaryMediaTrack::recycleTexture()</code>' method.
+    ///
+    /// @remark
+    /// This mode is supported on devices which have
+    /// <code>EmssVersionInfo::has_video_texture</code> set to
+    /// <code>true</code>.
+    kVideoTexture
   };
 
   /// Enumerates all possible states of

@@ -16,6 +16,7 @@ enum class OperationResult {
   kInvalidArgument,     ///< Method was called with an invalid argument.
   kListenerAlreadySet,  ///< This object already has a listener.
   kNoSuchListener,      ///< This object doesn't have a listener.
+  kNotSupported,        ///< This functionality is not supported on a device.
   kFailed,              ///< Operation failed for an unknown reason.
 };
 

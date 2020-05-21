@@ -35,6 +35,12 @@ template <class CAPIAsyncResult>
 using CAsyncFunction = EMSSOperationResult (*)(int,
                                                void (*)(CAPIAsyncResult, void*),
                                                void*);
+template <class CAPIAsyncOperationResult, class Arg>
+using CAsyncFunctionWithArg =
+    EMSSOperationResult (*)(int,
+                            Arg,
+                            void (*)(CAPIAsyncOperationResult, void*),
+                            void*);
 
 template <class T, class Arg, void (T::*handler)(Arg)>
 void ListenerCallback(Arg arg, void* userData) {
@@ -72,6 +78,19 @@ auto CAPIAsyncCall(std::function<void(AsyncResult)> cb, Args&&... args) {
   return CAPICall<void>(std::forward<Args>(args)...,
                         OnCAPICallFinished<AsyncResult, CAPIAsyncResult>,
                         callback);
+}
+
+template <class AsyncOperationResult, class CAPIAsyncOperationResult, class Arg>
+auto CAPIAsyncCallWithArg(
+    CAsyncFunctionWithArg<CAPIAsyncOperationResult, Arg> fn,
+    int handle,
+    Arg arg,
+    std::function<void(AsyncOperationResult)> cb) {
+  auto callback = new std::function<void(AsyncOperationResult)>(cb);
+  return CAPICall<void>(
+      fn, handle, arg,
+      OnCAPICallFinished<AsyncOperationResult, CAPIAsyncOperationResult>,
+      callback);
 }
 
 #endif  // LIB_SAMSUNG_BINDINGS_COMMON_H_

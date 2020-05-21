@@ -18,6 +18,7 @@
 #include "samsung/wasm/elementary_media_track_listener.h"
 #include "samsung/wasm/encrypted_elementary_media_packet.h"
 #include "samsung/wasm/media_key.h"
+#include "samsung/wasm/tizen_tv_wasm.h"
 
 namespace {
 
@@ -143,6 +144,18 @@ Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId app_session_id) {
                         session_id);
 }
 
+Result<void> ElementaryMediaTrack::FillTextureWithNextFrame(
+    GLuint textureId,
+    std::function<void(ElementaryMediaTrack::AsyncResult)> finishedCallback) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPIAsyncCallWithArg<
+      AsyncResult, EMSSElementaryMediaTrackAsyncOperationResult, uint32_t>(
+      elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
+      finishedCallback);
+}
+
 Result<SessionId> ElementaryMediaTrack::GetSessionId() const {
   if (version_info_.has_legacy_emss) {
     Result<SessionId> result;
@@ -155,6 +168,21 @@ Result<SessionId> ElementaryMediaTrack::GetSessionId() const {
 
 Result<bool> ElementaryMediaTrack::IsOpen() const {
   return CAPICall<bool>(elementaryMediaTrackIsOpen, handle_);
+}
+
+Result<void> ElementaryMediaTrack::RecycleTexture(GLuint textureId) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPICall<void>(elementaryMediaTrackRecycleTexture, handle_, textureId);
+}
+
+Result<void> ElementaryMediaTrack::RegisterCurrentGraphicsContext() {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPICall<void>(elementaryMediaTrackRegisterCurrentGraphicsContext,
+                        handle_);
 }
 
 Result<void> ElementaryMediaTrack::SetMediaKey(wasm::MediaKey* key) {

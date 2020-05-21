@@ -7,7 +7,9 @@
 #define INCLUDE_SAMSUNG_WASM_ELEMENTARY_MEDIA_TRACK_H_
 
 #include <cstdint>
+#include <functional>
 
+#include "GLES/gl.h"
 #include "samsung/wasm/common.h"
 #include "samsung/wasm/emss_version_info.h"
 #include "samsung/wasm/operation_result.h"
@@ -57,9 +59,19 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
+  enum class AsyncResult {
+    kSuccess,
+    kAlreadyDestroyedError,
+    kWebGLContextNotRegistedError,
+    kAlreadyInProgressError,
+    kInvalidDataError,
+    kNotSupportedError,
+    kUnknownError,
+  };
+
   /// Default constructor, creates an <b>invalid</b>
-  /// <code>ElementaryMediaTrack</code> object, to be further replaced with a
-  /// proper one, received with a call to
+  /// <code>ElementaryMediaTrack</code> object, to be further replaced with
+  /// a proper one, received with a call to
   /// <code>ElementaryMediaStreamSource::AddTrack</code>.
   ElementaryMediaTrack();
   ElementaryMediaTrack(const ElementaryMediaTrack&) = delete;
@@ -111,21 +123,40 @@ class ElementaryMediaTrack final {
   /// describing the error.
   Result<void> AppendEndOfTrack(SessionId session_id);
 
-  /// Sets a listener to receive updates about this track's state changes. Only
-  /// one listener can be set, setting another listner causes an error.
+  /// Fills provided texture with a decoded video frame.
+  /// Player will decode frames sent with
+  /// <code>ElementaryMediaTrack::AppendPacket</code>, but won't render them
+  /// when <code>ElementaryMediaStreamSource</code> is in
+  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode.
+  /// Instead, their contents can be accessed by calling this method
+  /// repeatedly.
   ///
-  /// @param[in] listener Listener to be set.
+  /// @remarks
+  /// When <code>texture_id</code> is processed,
+  /// it must be freed with <code>ElementaryMediaTrack::RecycleTexture</code>.
   ///
-  /// @warning The ownership isn't transferred, and, as such,
-  /// the listener must outlive the track.
+  /// @remarks
+  /// Sets texture to type <code>GL_TEXTURE_EXTERNAL_OES</code>.
+  ///
+  /// @param texture_id A texture that will be filled with video frame.
+  ///
+  /// @param finished_callback A callback which will be called when
+  /// <code>texture_id</code> is ready and should be rendered by App.
+  ///
+  /// @warning Can only be called in the
+  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
+  /// <code>ElementaryMediaStreamSource</code>.
+  /// Valid only for video track.
   ///
   /// @return <code>Result\<void\></code> with
   /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// <code>OperationResult::kSuccess</code>
+  /// on success, otherwise a code describing the error.
   ///
-  /// @sa ElementaryMediaTrackListener
-  Result<void> SetListener(ElementaryMediaTrackListener* listener);
+  /// @sa <code>ElementaryMediaTrack::RecycleTexture</code>
+  Result<void> FillTextureWithNextFrame(
+      GLuint texture_id,
+      std::function<void(AsyncResult)> finished_callback);
 
   /// Returns id of the currently active session.
   ///
@@ -162,6 +193,38 @@ class ElementaryMediaTrack final {
   /// on success, or a code describing the error.
   Result<bool> IsOpen() const;
 
+  /// Pass texture to platform to release decoder buffers for new frames.
+  /// Should be called after painting the frame has been completed.
+  ///
+  /// @warning Can only be called in the
+  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
+  /// <code>ElementaryMediaStreamSource</code>.
+  /// Valid only for video track.
+  ///
+  /// @return <code>Result\<void\></code> with
+  /// <code>operation_result</code> field set to
+  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
+  /// describing the error.
+  Result<void> RecycleTexture(GLuint textureId);
+
+  /// Pass current graphics context to platform to perform binding of
+  /// video frame content to Open GL textures passed in
+  /// <code>ElementaryMediaTrack::FillTextureWithNextFrame</code> method.
+  ///
+  /// @warning Bind current graphic context with OpenGLES first.
+  /// Otherwise no action will be performed.
+  ///
+  /// @warning Can only be called in the
+  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
+  /// <code>ElementaryMediaStreamSource</code>.
+  /// Valid only for video track.
+  ///
+  /// @return <code>Result\<void\></code> with
+  /// <code>operation_result</code> field set to
+  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
+  /// describing the error.
+  Result<void> RegisterCurrentGraphicsContext();
+
   /// Sets media keys used for decrypting packets in this track.
   ///
   /// @param[in] key Key to be set.
@@ -176,6 +239,22 @@ class ElementaryMediaTrack final {
   ///
   /// @sa MediaKey
   Result<void> SetMediaKey(MediaKey* key);
+
+  /// Sets a listener to receive updates about this track's state changes. Only
+  /// one listener can be set, setting another listner causes an error.
+  ///
+  /// @param[in] listener Listener to be set.
+  ///
+  /// @warning The ownership isn't transferred, and, as such,
+  /// the listener must outlive the track.
+  ///
+  /// @return <code>Result\<void\></code> with
+  /// <code>operation_result</code> field set to
+  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
+  /// describing the error.
+  ///
+  /// @sa ElementaryMediaTrackListener
+  Result<void> SetListener(ElementaryMediaTrackListener* listener);
 
  private:
   explicit ElementaryMediaTrack(int handle, EmssVersionInfo version_info);

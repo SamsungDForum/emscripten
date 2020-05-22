@@ -5,6 +5,7 @@
 
 #include "samsung/wasm/elementary_media_track.h"
 
+#include <atomic>
 #include <chrono>
 #include <type_traits>
 #include <utility>
@@ -82,48 +83,217 @@ void OnSeekListenerCallback(float new_time, void* user_data) {
 namespace samsung {
 namespace wasm {
 
-ElementaryMediaTrack::ElementaryMediaTrack()
-    : ElementaryMediaTrack(-1, EmssVersionInfo::Create()) {}
+/*============================================================================*/
+/*= samsung::wasm::ElementaryMediaTrack::Impl declaration                    =*/
+/*============================================================================*/
 
-ElementaryMediaTrack::ElementaryMediaTrack(int handle,
-                                           EmssVersionInfo version_info)
-    : handle_(handle), version_info_(version_info) {}
+class ElementaryMediaTrack::Impl {
+ public:
+  explicit Impl(int handle,
+                EmssVersionInfo version_info,
+                bool use_session_id_emulation);
+  Impl(const Impl&) = delete;
+  Impl(Impl&&) = delete;
+  Impl& operator=(const Impl&) = delete;
+  Impl& operator=(Impl&&) = delete;
+  ~Impl();
 
-ElementaryMediaTrack::ElementaryMediaTrack(ElementaryMediaTrack&& other)
-    : handle_(std::exchange(other.handle_, -1)),
-      version_info_(other.version_info_) {}
+  bool IsValid() const;
+  Result<void> AppendPacket(const ElementaryMediaPacket& packet);
+  Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
+  Result<void> AppendEndOfTrack(SessionId session_id);
+  Result<void> FillTextureWithNextFrame(
+      GLuint texture_id,
+      std::function<void(AsyncResult)> finished_callback);
+  Result<SessionId> GetSessionId() const;
+  Result<bool> IsOpen() const;
+  Result<void> RecycleTexture(GLuint textureId);
+  Result<void> RegisterCurrentGraphicsContext();
+  Result<void> SetMediaKey(MediaKey* key);
+  Result<void> SetListener(ElementaryMediaTrackListener* listener);
 
-ElementaryMediaTrack& ElementaryMediaTrack::operator=(
-    ElementaryMediaTrack&& other) {
-  handle_ = std::exchange(other.handle_, -1);
-  version_info_ = other.version_info_;
-  return *this;
+  int handle() const { return handle_; }
+
+ private:
+  Result<void> AppendPacketInternal(const ElementaryMediaPacket&);
+  Result<void> AppendEncryptedPacketInternal(
+      const EncryptedElementaryMediaPacket&);
+  OperationResult SetListenerInternal(ElementaryMediaTrackListener* listener);
+
+  // session id emulation for legacy mode: methods
+  void EmulateSessionIdChange();
+  void RegisterSessionIdEmulationCallbacks();
+  void UnregisterSessionIdEmulationCallbacks();
+  bool UseEmulatedAppend(SessionId session_id) const {
+    return use_session_id_emulation_ && session_id != kIgnoreSessionId;
+  }
+
+  int handle_;
+  ElementaryMediaTrackListener* listener_;
+  EmssVersionInfo version_info_;
+
+  // session id emulation for legacy mode: variables
+  std::atomic<SessionId> emulated_session_id_;
+  bool use_session_id_emulation_;
+};
+
+/*============================================================================*/
+/*= samsung::wasm::ElementaryMediaTrack::Impl definition                     =*/
+/*============================================================================*/
+
+ElementaryMediaTrack::Impl::Impl(int handle,
+                                 EmssVersionInfo version_info,
+                                 bool use_session_id_emulation)
+    : handle_(handle),
+      listener_(nullptr),
+      version_info_(version_info),
+      emulated_session_id_(0),
+      use_session_id_emulation_(use_session_id_emulation) {
+  if (use_session_id_emulation_)
+    RegisterSessionIdEmulationCallbacks();
 }
 
-ElementaryMediaTrack::~ElementaryMediaTrack() {
+ElementaryMediaTrack::Impl::~Impl() {
   if (IsValid()) {
+    if (use_session_id_emulation_)
+      UnregisterSessionIdEmulationCallbacks();
+    if (listener_)
+      SetListenerInternal(nullptr);
     elementaryMediaTrackRemove(handle_);
   }
 }
 
-bool ElementaryMediaTrack::IsValid() const {
+bool ElementaryMediaTrack::Impl::IsValid() const {
   return IsHandleValid(handle_);
 }
 
-Result<void> ElementaryMediaTrack::AppendPacket(
+Result<void> ElementaryMediaTrack::Impl::AppendPacket(
     const samsung::wasm::ElementaryMediaPacket& packet) {
+  if (!UseEmulatedAppend(packet.session_id)) {
+    // Use default code path.
+    return AppendPacketInternal(packet);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != packet.session_id) {
+      return {OperationResult::kFailed};
+    }
+    return AppendPacketInternal(packet);
+  }
+}
+
+Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacket(
+    const EncryptedElementaryMediaPacket& packet) {
+  if (!UseEmulatedAppend(packet.session_id)) {
+    // Use default code path.
+    return AppendEncryptedPacketInternal(packet);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != packet.session_id) {
+      return {OperationResult::kFailed};
+    }
+    return AppendEncryptedPacketInternal(packet);
+  }
+}
+
+Result<void> ElementaryMediaTrack::Impl::AppendEndOfTrack(
+    SessionId app_session_id) {
+  if (!UseEmulatedAppend(app_session_id)) {
+    // Use default code path.
+    auto session_id =
+        (version_info_.has_legacy_emss ? kIgnoreSessionId : app_session_id);
+    return CAPICall<void>(elementaryMediaTrackAppendEndOfTrack, handle_,
+                          session_id);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != app_session_id) {
+      return {OperationResult::kFailed};
+    }
+    return CAPICall<void>(elementaryMediaTrackAppendEndOfTrack, handle_,
+                          kIgnoreSessionId);
+  }
+}
+
+Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrame(
+    GLuint textureId,
+    std::function<void(ElementaryMediaTrack::AsyncResult)> finishedCallback) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPIAsyncCallWithArg<
+      AsyncResult, EMSSElementaryMediaTrackAsyncOperationResult, uint32_t>(
+      elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
+      finishedCallback);
+}
+
+Result<SessionId> ElementaryMediaTrack::Impl::GetSessionId() const {
+  if (use_session_id_emulation_) {
+    return {emulated_session_id_.load(), OperationResult::kSuccess};
+  } else if (version_info_.has_legacy_emss) {
+    return {kIgnoreSessionId, OperationResult::kSuccess};
+  }
+  return CAPICall<SessionId>(elementaryMediaTrackGetSessionId, handle_);
+}
+
+Result<bool> ElementaryMediaTrack::Impl::IsOpen() const {
+  return CAPICall<bool>(elementaryMediaTrackIsOpen, handle_);
+}
+
+Result<void> ElementaryMediaTrack::Impl::RecycleTexture(GLuint textureId) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPICall<void>(elementaryMediaTrackRecycleTexture, handle_, textureId);
+}
+
+Result<void> ElementaryMediaTrack::Impl::RegisterCurrentGraphicsContext() {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPICall<void>(elementaryMediaTrackRegisterCurrentGraphicsContext,
+                        handle_);
+}
+
+Result<void> ElementaryMediaTrack::Impl::SetMediaKey(wasm::MediaKey* key) {
+  return CAPICall<void>(elementaryMediaTrackSetMediaKey, handle_, key->handle_);
+}
+
+Result<void> ElementaryMediaTrack::Impl::SetListener(
+    ElementaryMediaTrackListener* listener) {
+  if (listener_ && listener)
+    SetListenerInternal(nullptr);
+
+  auto result = SetListenerInternal(listener);
+  if (result != OperationResult::kSuccess) {
+    // Rollback any listeners that were potentially set during the
+    // SetListenerInternal call.
+    if (listener)
+      SetListenerInternal(nullptr);
+    listener_ = nullptr;
+    return {result};
+  }
+
+  listener_ = listener;
+  return {OperationResult::kSuccess};
+}
+
+// private:
+
+Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
+    const ElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
     capi_packet.session_id = kIgnoreSessionId;
   }
-
   return CAPICall<void>(elementaryMediaTrackAppendPacket, handle_,
                         &capi_packet);
 }
 
-Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
+Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
     const EncryptedElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
 
@@ -136,75 +306,157 @@ Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
                         &capi_packet);
 }
 
-Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId app_session_id) {
-  // Legacy EMSS didn't support session_id concept.
-  auto session_id =
-      (version_info_.has_legacy_emss ? kIgnoreSessionId : app_session_id);
-  return CAPICall<void>(elementaryMediaTrackAppendEndOfTrack, handle_,
-                        session_id);
+OperationResult ElementaryMediaTrack::Impl::SetListenerInternal(
+    ElementaryMediaTrackListener* listener) {
+  if (listener) {
+    LISTENER_OP(elementaryMediaTrackSetOnTrackOpen, handle_,
+                ListenerCallback<ElementaryMediaTrackListener,
+                                 &ElementaryMediaTrackListener::OnTrackOpen>,
+                listener);
+    LISTENER_OP(elementaryMediaTrackSetOnTrackClosed, handle_,
+                OnTrackClosedListenerCallback, listener);
+    LISTENER_OP(elementaryMediaTrackSetOnSeek, handle_, OnSeekListenerCallback,
+                listener);
+
+    if (!version_info_.has_legacy_emss) {
+      LISTENER_OP(
+          elementaryMediaTrackSetOnSessionIdChanged, handle_,
+          ListenerCallback<ElementaryMediaTrackListener, SessionId,
+                           &ElementaryMediaTrackListener::OnSessionIdChanged>,
+          listener);
+    }
+  } else {
+    LISTENER_OP(elementaryMediaTrackUnsetOnTrackOpen, handle_);
+    LISTENER_OP(elementaryMediaTrackUnsetOnTrackClosed, handle_);
+    LISTENER_OP(elementaryMediaTrackUnsetOnSeek, handle_);
+
+    if (!version_info_.has_legacy_emss) {
+      LISTENER_OP(elementaryMediaTrackUnsetOnSessionIdChanged, handle_);
+    }
+  }
+  return OperationResult::kSuccess;
+}
+
+// session id emulation for legacy mode: private methods
+
+void ElementaryMediaTrack::Impl::EmulateSessionIdChange() {
+  assert(use_session_id_emulation_);
+  // atomically increases session id
+  SessionId new_sid = ++emulated_session_id_;
+
+  if (listener_)
+    listener_->OnSessionIdChanged(new_sid);
+}
+
+void ElementaryMediaTrack::Impl::RegisterSessionIdEmulationCallbacks() {
+  CAPICall<void>(
+      elementaryMediaTrackSetListenersForSessionIdEmulation, handle_,
+      [](EMSSElementaryMediaTrackCloseReason reason, void* user_data) {
+        auto thiz = static_cast<ElementaryMediaTrack::Impl*>(user_data);
+        thiz->EmulateSessionIdChange();
+      },
+      this);
+}
+
+void ElementaryMediaTrack::Impl::UnregisterSessionIdEmulationCallbacks() {
+  CAPICall<void>(elementaryMediaTrackUnsetListenersForSessionIdEmulation,
+                 handle_);
+}
+
+/*============================================================================*/
+/*= samsung::wasm::ElementaryMediaTrack:                                     =*/
+/*============================================================================*/
+
+ElementaryMediaTrack::ElementaryMediaTrack() = default;
+
+ElementaryMediaTrack::ElementaryMediaTrack(int handle,
+                                           EmssVersionInfo version_info,
+                                           bool use_session_id_emulation)
+    : pimpl_(std::make_unique<Impl>(handle,
+                                    version_info,
+                                    use_session_id_emulation)) {}
+
+ElementaryMediaTrack::~ElementaryMediaTrack() = default;
+
+ElementaryMediaTrack::ElementaryMediaTrack(ElementaryMediaTrack&&) = default;
+
+ElementaryMediaTrack& ElementaryMediaTrack::operator=(ElementaryMediaTrack&&) =
+    default;
+
+bool ElementaryMediaTrack::IsValid() const {
+  if (!pimpl_)
+    return false;
+  return pimpl_->IsValid();
+}
+
+Result<void> ElementaryMediaTrack::AppendPacket(
+    const ElementaryMediaPacket& packet) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendPacket(packet);
+}
+
+Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
+    const EncryptedElementaryMediaPacket& packet) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendEncryptedPacket(packet);
+}
+
+Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId session_id) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendEndOfTrack(session_id);
 }
 
 Result<void> ElementaryMediaTrack::FillTextureWithNextFrame(
-    GLuint textureId,
-    std::function<void(ElementaryMediaTrack::AsyncResult)> finishedCallback) {
-  if (!version_info_.has_video_texture)
-    return {OperationResult::kNotSupported};
-
-  return CAPIAsyncCallWithArg<
-      AsyncResult, EMSSElementaryMediaTrackAsyncOperationResult, uint32_t>(
-      elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
-      finishedCallback);
+    GLuint texture_id,
+    std::function<void(AsyncResult)> finished_callback) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->FillTextureWithNextFrame(texture_id,
+                                          std::move(finished_callback));
 }
 
 Result<SessionId> ElementaryMediaTrack::GetSessionId() const {
-  if (version_info_.has_legacy_emss) {
-    Result<SessionId> result;
-    result.operation_result = OperationResult::kSuccess;
-    result.value = kIgnoreSessionId;
-    return result;
-  }
-  return CAPICall<SessionId>(elementaryMediaTrackGetSessionId, handle_);
+  if (!pimpl_)
+    return {kIgnoreSessionId, OperationResult::kInvalidObject};
+  return pimpl_->GetSessionId();
 }
 
 Result<bool> ElementaryMediaTrack::IsOpen() const {
-  return CAPICall<bool>(elementaryMediaTrackIsOpen, handle_);
+  if (!pimpl_)
+    return {false, OperationResult::kInvalidObject};
+  return pimpl_->IsOpen();
 }
 
 Result<void> ElementaryMediaTrack::RecycleTexture(GLuint textureId) {
-  if (!version_info_.has_video_texture)
-    return {OperationResult::kNotSupported};
-
-  return CAPICall<void>(elementaryMediaTrackRecycleTexture, handle_, textureId);
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->RecycleTexture(textureId);
 }
 
 Result<void> ElementaryMediaTrack::RegisterCurrentGraphicsContext() {
-  if (!version_info_.has_video_texture)
-    return {OperationResult::kNotSupported};
-
-  return CAPICall<void>(elementaryMediaTrackRegisterCurrentGraphicsContext,
-                        handle_);
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->RegisterCurrentGraphicsContext();
 }
 
-Result<void> ElementaryMediaTrack::SetMediaKey(wasm::MediaKey* key) {
-  return CAPICall<void>(elementaryMediaTrackSetMediaKey, handle_, key->handle_);
+Result<void> ElementaryMediaTrack::SetMediaKey(MediaKey* key) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->SetMediaKey(key);
 }
 
 Result<void> ElementaryMediaTrack::SetListener(
     ElementaryMediaTrackListener* listener) {
-  SET_LISTENER(elementaryMediaTrackSetOnTrackOpen, handle_,
-               ListenerCallback<ElementaryMediaTrackListener,
-                                &ElementaryMediaTrackListener::OnTrackOpen>,
-               listener);
-  SET_LISTENER(elementaryMediaTrackSetOnTrackClosed, handle_,
-               OnTrackClosedListenerCallback, listener);
-  SET_LISTENER(elementaryMediaTrackSetOnSeek, handle_, OnSeekListenerCallback,
-               listener);
-  SET_LISTENER(
-      elementaryMediaTrackSetOnSessionIdChanged, handle_,
-      ListenerCallback<ElementaryMediaTrackListener, SessionId,
-                       &ElementaryMediaTrackListener::OnSessionIdChanged>,
-      listener);
-  return {OperationResult::kSuccess};
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->SetListener(listener);
+}
+
+int ElementaryMediaTrack::GetHandle() const {
+  return pimpl_ ? pimpl_->handle() : -1;
 }
 
 }  // namespace wasm

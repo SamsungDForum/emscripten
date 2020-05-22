@@ -213,8 +213,7 @@ class ElementaryMediaStreamSource final {
   /// <code>false</code>.
   bool IsValid() const;
 
-  /// Adds an audio track, with parameters as set in the argument, to the
-  /// source.
+  /// Adds an audio track to the source.
   ///
   /// @param[in] config A config describing track.
   ///
@@ -230,7 +229,7 @@ class ElementaryMediaStreamSource final {
   /// - Audio parameters cannot be changed during the lifetime of the track.
   Result<ElementaryMediaTrack> AddTrack(const ElementaryAudioTrackConfig&);
 
-  /// Adds a video track, with parameters as set in the argument, to the source.
+  /// Adds a video track to the source.
   ///
   /// @param[in] config A config describing track.
   ///
@@ -346,9 +345,11 @@ class ElementaryMediaStreamSource final {
   Result<ReadyState> GetReadyState() const;
 
   /// Sets a listener to receive updates about EMSS's state changes. Only one
-  /// listener can be set, setting another listner causes an error.
+  /// listener can be set: setting another clears the previous one. Pass <code>
+  /// nullptr</code> to reset the listener
   ///
-  /// @param[in] listener Listener to be set.
+  /// @param[in] listener Listener to be set or <code>nullptr</code> to unset
+  /// the listener.
   ///
   /// @warning The ownership isn't transferred, and, as such,
   /// the listener must outlive the source.
@@ -370,11 +371,14 @@ class ElementaryMediaStreamSource final {
 
  private:
   void SetHTMLMediaElement(html::HTMLMediaElement*);
+  OperationResult SetListenerInternal(
+      ElementaryMediaStreamSourceListener* listener);
 
   int handle_;
   html::HTMLMediaElement* html_media_element_;
   ElementaryMediaStreamSourceListener* listener_;
   std::unique_ptr<char, decltype(&std::free)> url_;
+  bool use_session_id_emulation_;
   EmssVersionInfo version_info_;
 
   friend class html::HTMLMediaElement;

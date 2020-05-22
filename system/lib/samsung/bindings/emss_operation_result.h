@@ -12,7 +12,7 @@ extern "C" {
 
 typedef enum EMSSOperationResult {
   EmssSuccess = 0,
-  EmssWrongHandle,
+  EmssInvalidObject,
   EmssInvalidArgument,
   EmssListenerAlreadySet,
   EmssNoSuchListener,

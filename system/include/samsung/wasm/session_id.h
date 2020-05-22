@@ -16,17 +16,17 @@ namespace wasm {
 
 /// A <b>session</b> starts when track opens and lasts until it closes. All
 /// packets sent between those two events belong to a single session. When
-/// appending either a packet or an end of track to @ref ElementaryMediaTrack,
-/// a multithreaded App must mark them with the current <code>session_id
-/// </code> value.
+/// appending either a packet or an end of track to <code>ElementaryMediaTrack
+/// </code>, a multithreaded App must mark them with the current <code>
+/// session_id</code> value.
 ///
 /// @sa ElementaryMediaPacket::session_id
 /// @sa ElementaryMediaTrack::GetSessionId()
 /// @sa ElementaryMediaTrackListener::OnSessionIdChanged()
 using SessionId = int32_t;
 
-/// This should be passed as @ref ElementaryMediaPacket::session_id when session
-/// mechanism is not used (e.g. App append packets on the main thread).
+/// This should be passed as <code>ElementaryMediaPacket::session_id</code> when
+/// session mechanism is not used (e.g. App append packets on the main thread).
 extern const SessionId kIgnoreSessionId;
 
 }  // namespace wasm

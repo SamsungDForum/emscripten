@@ -125,9 +125,11 @@ class HTMLMediaElement final {
   wasm::Result<void> Pause();
 
   /// Sets a listener to receive updates about HTMLMediaElement. Only one
-  /// listener can be set, setting another listner causes an error.
+  /// listener can be set: setting another clears the previous one. Pass <code>
+  /// nullptr</code> to reset the listener
   ///
-  /// @param[in] listener Listener to be set.
+  /// @param[in] listener Listener to be set or <code>nullptr</code> to unset
+  /// the listener.
   ///
   /// @warning The ownership isn't transferred, and, as such,
   /// the listener must outlive the source.
@@ -141,12 +143,18 @@ class HTMLMediaElement final {
   wasm::Result<void> SetListener(HTMLMediaElementListener* listener);
 
  private:
-  wasm::Result<void> RegisterOnTimeUpdateEMSS(
-      wasm::ElementaryMediaStreamSourceListener*);
-  void UnregisterOnTimeUpdateEMSS();
+  wasm::OperationResult SetListenerInternal(HTMLMediaElementListener* listener);
 
-  wasm::ElementaryMediaStreamSource* source_;
+  // legacy EMSS compatibility: methods
+  wasm::Result<void> RegisterOnTimeUpdateEMSS(
+      wasm::ElementaryMediaStreamSourceListener*, int source_handle);
+  void UnregisterOnTimeUpdateEMSS(int source_handle);
+
   int handle_;
+  HTMLMediaElementListener* listener_;
+
+  // legacy EMSS compatibility: variables
+  wasm::ElementaryMediaStreamSource* source_;
 
   friend class wasm::ElementaryMediaStreamSource;
 };

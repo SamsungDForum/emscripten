@@ -42,6 +42,25 @@ struct Result {
   const T* operator->() const;
 };
 
+class JsHandle {
+ public:
+  JsHandle() : handle_(-1) {}
+  JsHandle(int handle) : handle_(handle) {}
+  JsHandle(const JsHandle&) = delete;
+  JsHandle& operator=(const JsHandle&) = delete;
+  JsHandle(JsHandle&& other) : handle_(other.handle_) {
+    other.handle_ = 0;
+  }
+  JsHandle& operator=(JsHandle&& other) {
+    handle_ = other.handle_;
+    other.handle_ = 0;
+  }
+  operator int() const { return handle_; }
+  bool IsValid() const { return handle_ >= 0; }
+ private:
+  int handle_;
+};
+
 /// @cond 0
 template <>
 struct Result<void> {

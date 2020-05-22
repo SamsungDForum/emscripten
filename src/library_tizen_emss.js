@@ -863,12 +863,18 @@ const LibraryTizenEmss = {
     return EmssCommon.Result.SUCCESS;
   },
 
-  mediaElementRegisterOnTimeUpdateEMSS__deps: ['$EmssCommon', '$WasmHTMLMediaElement'],
+  mediaElementRegisterOnTimeUpdateEMSS__deps: ['$EmssCommon', '$WasmHTMLMediaElement', '$WasmElementaryMediaStreamSource'],
   mediaElementRegisterOnTimeUpdateEMSS__proxy: 'sync',
-  mediaElementRegisterOnTimeUpdateEMSS: function(handle, eventHandler, listener, element) {
+  mediaElementRegisterOnTimeUpdateEMSS: function(handle, sourceHandle, eventHandler, listener) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
       console.warn(`No such media element: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+
+    const source = WasmElementaryMediaStreamSource.handleMap[sourceHandle];
+    if (!source) {
+      console.warn(`No such Source: '${sourceHandle}'`);
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -877,17 +883,53 @@ const LibraryTizenEmss = {
       return EmssCommon.Result.LISTENER_ALREADY_SET;
     }
 
-    const callback = (event) => {
-        {{{ makeDynCall('vii') }}} (eventHandler, listener, element);
+    const firePlaybackPositionChanged = () => {
+      // Looping doesn't work in legacy EMSS, so it's emulated by performing
+      // seek to the beginning of media when playback position reaches
+      // EMULATED_LOOP_TRESHOLD to media duration.
+      const EMULATED_LOOP_TRESHOLD = 3.0;
+      const newTime = mediaElement.currentTime;
+      if (mediaElement.loop &&
+          newTime >= mediaElement.duration - EMULATED_LOOP_TRESHOLD) {
+        mediaElement.currentTime = 0;
+        return;
+      }
+      {{{ makeDynCall('vif') }}} (eventHandler, listener, newTime);
+    }
+
+    const timeUpdateForPositionChangeEmulationCb = (event) => {
+      if (mediaElement.seeking) {
+        return;
+      }
+      firePlaybackPositionChanged();
     };
 
-    mediaElement.emssTimeUpdateListener = callback;
-    mediaElement.addEventListener('timeupdate', callback);
+    const openForPositionChangeEmulationCb = (event, runningFromDefaultHandler) => {
+      const sourceListeners = WasmElementaryMediaStreamSource.listenerMap[source];
+      if (!runningFromDefaultHandler && sourceListeners &&
+          sourceListeners['sourceopen']) {
+        // If sourceopen is registered, then it will emit emulated running time
+        // change event. This is needed to ensure order of events is correct.
+        return;
+      }
+      firePlaybackPositionChanged();
+    };
+
+    source.emssOpenForPositionChangeEmulation =
+        openForPositionChangeEmulationCb;
+    source.addEventListener('sourceopen', openForPositionChangeEmulationCb);
+
+    mediaElement.emssTimeUpdateListener =
+        timeUpdateForPositionChangeEmulationCb;
+    mediaElement.addEventListener('timeupdate',
+                                  timeUpdateForPositionChangeEmulationCb);
+
+    return EmssCommon.Result.SUCCESS;
   },
 
   mediaElementUnregisterOnTimeUpdateEMSS__deps: ['$EmssCommon', '$WasmHTMLMediaElement'],
   mediaElementUnregisterOnTimeUpdateEMSS__proxy: 'sync',
-  mediaElementUnregisterOnTimeUpdateEMSS: function(handle) {
+  mediaElementUnregisterOnTimeUpdateEMSS: function(handle, sourceHandle) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
       console.warn(`No such media element: '${handle}'`);
@@ -899,8 +941,20 @@ const LibraryTizenEmss = {
       return EmssCommon.Result.NO_SUCH_LISTENER;
     }
 
-    mediaElement.removeEventListener('timeupdate', mediaElement.emssTimeUpdateListener);
+    mediaElement.removeEventListener('timeupdate',
+                                     mediaElement.emssTimeUpdateListener);
     delete mediaElement.emssTimeUpdateListener;
+
+    const source = WasmElementaryMediaStreamSource.handleMap[sourceHandle];
+    if (!source) {
+      console.warn(`No such Source: '${sourceHandle}'`);
+    } else {
+      mediaElement.removeEventListener('sourceopen',
+          source.emssOpenForPositionChangeEmulation);
+      delete source.emssOpenForPositionChangeEmulation;
+    }
+
+    return EmssCommon.Result.SUCCESS;
   },
 
   mediaElementPlay__deps: ['$WasmHTMLMediaElement'],
@@ -1285,6 +1339,37 @@ const LibraryTizenEmss = {
       'playbackpositionchanged');
   },
 
+  EMSSSetOnSourceOpen__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSSetOnSourceOpen__proxy: 'sync',
+  EMSSSetOnSourceOpen: function(handle, eventHandler, userData) {
+    return WasmElementaryMediaStreamSource._setListener(
+      handle,
+      'sourceopen',
+      (event) => {
+        {{{ makeDynCall('vi') }}} (eventHandler, userData);
+
+        // if running change emulation cb is registered, it needs to be emitted
+        // here to assure order of events is correct.
+        const source = WasmElementaryMediaStreamSource.handleMap[handle];
+        if (!source) {
+          return;
+        }
+        const openForPositionChangeEmulation =
+            source.emssOpenForPositionChangeEmulation;
+        if (openForPositionChangeEmulation) {
+          openForPositionChangeEmulation(event, true);
+        }
+      });
+  },
+
+  EMSSUnsetOnSourceOpen__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSUnsetOnSourceOpen__proxy: 'sync',
+  EMSSUnsetOnSourceOpen: function(handle) {
+    return WasmElementaryMediaStreamSource._unsetListener(
+      handle,
+      'sourceopen');
+  },
+
 /*============================================================================*/
 /*= samsung::wasm::ElementaryMediaTrack impl:                                =*/
 /*============================================================================*/
@@ -1520,10 +1605,20 @@ const LibraryTizenEmss = {
       handle,
       'trackclosed',
       (event) => {
+        const closeReason =
+            WasmElementaryMediaTrack._stringToCloseReason(event.reason);
         {{{ makeDynCall('vii') }}} (
           eventHandler,
-          WasmElementaryMediaTrack._stringToCloseReason(event.reason),
+          closeReason,
           userData);
+        // if trackclosed_sid_emulation is registered, it needs to be emitted
+        // here to assure events order is correct.
+        const onClosedForSessionEmulation =
+            WasmElementaryMediaTrack.listenerMap[handle][
+                'trackclosed_sid_emulation'];
+        if (onClosedForSessionEmulation) {
+          onClosedForSessionEmulation(event, true);
+        }
       });
   },
 
@@ -1575,6 +1670,52 @@ const LibraryTizenEmss = {
       'sessionidchanged');
   },
 
+  elementaryMediaTrackSetListenersForSessionIdEmulation__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackSetListenersForSessionIdEmulation__proxy: 'sync',
+  elementaryMediaTrackSetListenersForSessionIdEmulation: function(
+      handle, closedHandler, userData) {
+    console.info(
+        `session_id will be emulated for track ${handle}, for object: ${userData}`);
+
+    const onClosed = (event, runningFromDefaultHandler) => {
+      if (!runningFromDefaultHandler &&
+          WasmElementaryMediaTrack.listenerMap[handle]['trackclosed']) {
+        // If trackclosed is registered, then it will emit emulated session
+        // change event. This is needed to ensure order of events is correct.
+        return;
+      }
+      {{{ makeDynCall('vii') }}} (
+        closedHandler,
+        WasmElementaryMediaTrack._stringToCloseReason(event.reason),
+        userData);
+    };
+
+    const obj = WasmElementaryMediaTrack.handleMap[handle];
+    if (obj) {
+      WasmElementaryMediaTrack.listenerMap[handle][
+          'trackclosed_sid_emulation'] = onClosed;
+      obj.addEventListener('trackclosed', onClosed);
+    } else {
+      console.warn(`No such Track: '${handle}'`);
+    }
+    return EmssCommon.Result.SUCCESS;
+  },
+
+  elementaryMediaTrackUnsetListenersForSessionIdEmulation__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackUnsetListenersForSessionIdEmulation__proxy: 'sync',
+  elementaryMediaTrackUnsetListenersForSessionIdEmulation: function(handle) {
+    const obj = WasmElementaryMediaTrack.handleMap[handle];
+    obj.removeEventListener('trackclosed', WasmElementaryMediaTrack.listenerMap[
+        handle]['trackclosed_sid_emulation']);
+    WasmElementaryMediaTrack.listenerMap[handle]['trackclosed_sid_emulation'] =
+        null;
+    return EmssCommon.Result.SUCCESS;
+  },
+
+/*============================================================================*/
+/*= Bindings for listeners' setters and unsetters:                           =*/
+/*============================================================================*/
+
   {{{
     const makeEventHandlerFor = (objName, wasmImplName) => (eventName) => {
       return [
@@ -1619,7 +1760,6 @@ const LibraryTizenEmss = {
           'OnSourceDetached',
           'OnSourceClosed',
           'OnSourceOpenPending',
-          'OnSourceOpen',
           'OnSourceEnded'];
         const elementaryMediaTrackHandlers = [
           'OnTrackOpen'];

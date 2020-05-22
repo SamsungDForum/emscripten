@@ -95,6 +95,13 @@ extern EMSSOperationResult elementaryMediaTrackSetOnSessionIdChanged(
 extern EMSSOperationResult elementaryMediaTrackUnsetOnSessionIdChanged(
     int handle);
 
+extern EMSSOperationResult
+elementaryMediaTrackSetListenersForSessionIdEmulation(int handle,
+                                                      OnTrackClosedCallback,
+                                                      void* userData);
+extern EMSSOperationResult
+elementaryMediaTrackUnsetListenersForSessionIdEmulation(int handle);
+
 #ifdef __cplusplus
 }
 #endif

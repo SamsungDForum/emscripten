@@ -11,8 +11,8 @@ const char* EMSSOperationResultToString(EMSSOperationResult result) {
   switch (result) {
     case EmssSuccess:
       return "Success";
-    case EmssWrongHandle:
-      return "Wrong handle";
+    case EmssInvalidObject:
+      return "Invalid object";
     case EmssInvalidArgument:
       return "Invalid argument";
     case EmssListenerAlreadySet:

@@ -12,7 +12,7 @@ namespace wasm {
 /// Enumerates possible outcomes of WASM function calls.
 enum class OperationResult {
   kSuccess = 0,         ///< Operation ended with success.
-  kWrongHandle,         ///< Method was called on an invalid object.
+  kInvalidObject,       ///< Method was called on an invalid object.
   kInvalidArgument,     ///< Method was called with an invalid argument.
   kListenerAlreadySet,  ///< This object already has a listener.
   kNoSuchListener,      ///< This object doesn't have a listener.

@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 #include "GLES/gl.h"
 #include "samsung/wasm/common.h"
@@ -72,18 +73,17 @@ class ElementaryMediaTrack final {
   /// Default constructor, creates an <b>invalid</b>
   /// <code>ElementaryMediaTrack</code> object, to be further replaced with
   /// a proper one, received with a call to
-  /// <code>ElementaryMediaStreamSource::AddTrack</code>.
+  /// <code>ElementaryMediaStreamSource::AddTrack()</code>.
   ElementaryMediaTrack();
-  ElementaryMediaTrack(const ElementaryMediaTrack&) = delete;
-  ElementaryMediaTrack(ElementaryMediaTrack&&);
-  ElementaryMediaTrack& operator=(const ElementaryMediaTrack&) = delete;
-  ElementaryMediaTrack& operator=(ElementaryMediaTrack&&);
   ~ElementaryMediaTrack();
 
-  /// Returns <code>true</code> if track instance is valid. This method should
-  /// be called after a call to
-  /// <code>ElementaryMediaStreamSource::AddTrack</code>
-  /// to ensure backend initialized the object properly. If track is invalid
+  ElementaryMediaTrack(const ElementaryMediaTrack&) = delete;
+  ElementaryMediaTrack& operator=(const ElementaryMediaTrack&) = delete;
+
+  ElementaryMediaTrack(ElementaryMediaTrack&&);
+  ElementaryMediaTrack& operator=(ElementaryMediaTrack&&);
+
+  /// Returns <code>true</code> if track instance is valid. If track is invalid
   /// all method calls will fail.
   ///
   /// @return <code>true</code> if track instance is valid, otherwise
@@ -241,9 +241,11 @@ class ElementaryMediaTrack final {
   Result<void> SetMediaKey(MediaKey* key);
 
   /// Sets a listener to receive updates about this track's state changes. Only
-  /// one listener can be set, setting another listner causes an error.
+  /// one listener can be set: setting another clears the previous one. Pass
+  /// <code>nullptr</code> to reset the listener.
   ///
-  /// @param[in] listener Listener to be set.
+  /// @param[in] listener Listener to be set or <code>nullptr</code> to unset
+  /// the listener.
   ///
   /// @warning The ownership isn't transferred, and, as such,
   /// the listener must outlive the track.
@@ -257,13 +259,17 @@ class ElementaryMediaTrack final {
   Result<void> SetListener(ElementaryMediaTrackListener* listener);
 
  private:
-  explicit ElementaryMediaTrack(int handle, EmssVersionInfo version_info);
+  class Impl;
 
-  int handle_;
+  explicit ElementaryMediaTrack(int handle,
+                                EmssVersionInfo version_info,
+                                bool use_session_id_emulation);
 
-  EmssVersionInfo version_info_;
+  int GetHandle() const;
 
-  // access to handle_
+  std::unique_ptr<Impl> pimpl_;
+
+  // access to GetHandle()
   friend class ElementaryMediaStreamSource;
 };
 

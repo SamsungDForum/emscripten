@@ -27,11 +27,13 @@ void OnTimeUpdateEMSSCallback(void* user_data, void* element) {
 
   const auto* html_media_element = static_cast<HTMLMediaElement*>(element);
 
-  if (!html_media_element->HasSrc()) return;
+  if (!html_media_element->HasSrc())
+    return;
 
   auto new_time = html_media_element->GetCurrentTime();
 
-  if (new_time) listener->OnPlaybackPositionChanged(new_time.value);
+  if (new_time)
+    listener->OnPlaybackPositionChanged(new_time.value);
 }
 
 }  // namespace
@@ -50,10 +52,13 @@ HTMLMediaElement& HTMLMediaElement::operator=(HTMLMediaElement&& other) {
 }
 
 HTMLMediaElement::~HTMLMediaElement() {
-  if (IsValid()) mediaElementRemove(handle_);
+  if (IsValid())
+    mediaElementRemove(handle_);
 }
 
-bool HTMLMediaElement::IsValid() const { return IsHandleValid(handle_); }
+bool HTMLMediaElement::IsValid() const {
+  return IsHandleValid(handle_);
+}
 
 wasm::Result<bool> HTMLMediaElement::IsAutoplay() const {
   return CAPICall<bool>(mediaElementIsAutoplay, handle_);
@@ -109,7 +114,9 @@ wasm::Result<std::string> HTMLMediaElement::GetSrc() const {
   return {ret, wasm::OperationResult::kSuccess};
 }
 
-bool HTMLMediaElement::HasSrc() const { return source_; }
+bool HTMLMediaElement::HasSrc() const {
+  return source_;
+}
 
 wasm::Result<void> HTMLMediaElement::SetSrc(
     wasm::ElementaryMediaStreamSource* source) {

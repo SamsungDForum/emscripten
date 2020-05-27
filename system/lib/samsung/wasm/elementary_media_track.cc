@@ -61,7 +61,8 @@ namespace {
 }
 
 void OnTrackClosedListenerCallback(
-    EMSSElementaryMediaTrackCloseReason close_reason, void* user_data) {
+    EMSSElementaryMediaTrackCloseReason close_reason,
+    void* user_data) {
   using samsung::wasm::ElementaryMediaTrack;
   using samsung::wasm::ElementaryMediaTrackListener;
   (static_cast<ElementaryMediaTrackListener*>(user_data))
@@ -104,7 +105,9 @@ ElementaryMediaTrack::~ElementaryMediaTrack() {
   }
 }
 
-bool ElementaryMediaTrack::IsValid() const { return IsHandleValid(handle_); }
+bool ElementaryMediaTrack::IsValid() const {
+  return IsHandleValid(handle_);
+}
 
 Result<void> ElementaryMediaTrack::AppendPacket(
     const samsung::wasm::ElementaryMediaPacket& packet) {

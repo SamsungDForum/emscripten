@@ -6,15 +6,18 @@
 #include "samsung/wasm/tizen_tv_wasm.h"
 
 extern "C" {
-typedef void TizenTVWasm_AddApiFn(const char* name, const char* version,
+typedef void TizenTVWasm_AddApiFn(const char* name,
+                                  const char* version,
                                   const uint32_t* api_levels,
-                                  uint32_t api_level_size, void* user_data);
+                                  uint32_t api_level_size,
+                                  void* user_data);
 extern void TizenTVWasm_GetAvailableApis(TizenTVWasm_AddApiFn* add_api_fn,
                                          void* user_data);
 
 typedef void TizenTVWasm_AddInstructionsFn(const char* name, void* user_data);
 extern void TizenTVWasm_GetSupportedInstructions(
-    TizenTVWasm_AddInstructionsFn* add_instructions_fn, void* user_data);
+    TizenTVWasm_AddInstructionsFn* add_instructions_fn,
+    void* user_data);
 
 extern int TizenTVWasm_IsApiSupported(const char* name, uint32_t api_level);
 }

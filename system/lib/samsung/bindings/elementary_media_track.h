@@ -29,34 +29,47 @@ typedef enum EMSSElementaryMediaTrackCloseReason {
 
 typedef void (*OnTrackOpenCallback)(void* userData);
 typedef void (*OnTrackClosedCallback)(
-    EMSSElementaryMediaTrackCloseReason reason, void* userData);
+    EMSSElementaryMediaTrackCloseReason reason,
+    void* userData);
 typedef void (*OnTrackSeekCallback)(float newTime, void* userData);
 typedef void (*OnSessionIdChangedCallback)(int32_t sessionId, void* userData);
 
 extern EMSSOperationResult elementaryMediaTrackRemove(int handle);
 extern EMSSOperationResult elementaryMediaTrackAppendPacket(
-    int handle, EMSSElementaryMediaPacket* packet);
+    int handle,
+    EMSSElementaryMediaPacket* packet);
 extern EMSSOperationResult elementaryMediaTrackAppendEncryptedPacket(
-    int handle, EMSSEncryptedElementaryMediaPacket* packet);
+    int handle,
+    EMSSEncryptedElementaryMediaPacket* packet);
 extern EMSSOperationResult elementaryMediaTrackAppendEndOfTrack(
-    int handle, int32_t sessionId);
+    int handle,
+    int32_t sessionId);
 extern EMSSOperationResult elementaryMediaTrackGetSessionId(int handle,
                                                             int32_t* sessionId);
 extern EMSSOperationResult elementaryMediaTrackIsOpen(int handle, bool* isOpen);
 extern EMSSOperationResult elementaryMediaTrackSetMediaKey(
-    int handle, int media_key_handle);
+    int handle,
+    int media_key_handle);
 
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackOpen(
-    int handle, OnTrackOpenCallback callback, void* userData);
+    int handle,
+    OnTrackOpenCallback callback,
+    void* userData);
 extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackOpen(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackClosed(
-    int handle, OnTrackClosedCallback callback, void* userData);
+    int handle,
+    OnTrackClosedCallback callback,
+    void* userData);
 extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackClosed(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSeek(
-    int handle, OnTrackSeekCallback callback, void* userData);
+    int handle,
+    OnTrackSeekCallback callback,
+    void* userData);
 extern EMSSOperationResult elementaryMediaTrackUnsetOnSeek(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSessionIdChanged(
-    int handle, OnSessionIdChangedCallback callback, void* userData);
+    int handle,
+    OnSessionIdChangedCallback callback,
+    void* userData);
 extern EMSSOperationResult elementaryMediaTrackUnsetOnSessionIdChanged(
     int handle);
 

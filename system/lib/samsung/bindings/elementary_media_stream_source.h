@@ -50,10 +50,12 @@ extern EMSSOperationResult EMSSRemove(int handle);
 extern EMSSOperationResult EMSSCreateObjectURL(int handle, char** out);
 extern EMSSOperationResult EMSSRevokeObjectURL(char* url);
 extern EMSSOperationResult EMSSAddAudioTrack(
-    int handle, const EMSSElementaryAudioTrackConfig* config,
+    int handle,
+    const EMSSElementaryAudioTrackConfig* config,
     int* outTrackHandle);
 extern EMSSOperationResult EMSSAddVideoTrack(
-    int handle, const EMSSElementaryVideoTrackConfig* config,
+    int handle,
+    const EMSSElementaryVideoTrackConfig* config,
     int* outTrackHandle);
 extern EMSSOperationResult EMSSRemoveTrack(int handle, int trackHandle);
 extern EMSSOperationResult EMSSFlush(int handle);
@@ -90,7 +92,9 @@ extern EMSSOperationResult EMSSSetOnSourceEnded(int handle,
 extern EMSSOperationResult EMSSUnsetOnSourceEnded(int handle);
 
 extern EMSSOperationResult EMSSSetOnPlaybackPositionChanged(
-    int handle, OnPlaybackPositionChangedCallback callback, void* userData);
+    int handle,
+    OnPlaybackPositionChangedCallback callback,
+    void* userData);
 extern EMSSOperationResult EMSSUnsetOnPlaybackPositionChanged(int handle);
 
 #ifdef __cplusplus

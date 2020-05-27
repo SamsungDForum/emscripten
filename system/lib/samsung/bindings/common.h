@@ -22,7 +22,9 @@
     }                                                                 \
   } while (0)
 
-inline bool IsHandleValid(int handle) { return handle >= 0; }
+inline bool IsHandleValid(int handle) {
+  return handle >= 0;
+}
 
 inline samsung::wasm::OperationResult OperationResultFromCAPI(
     EMSSOperationResult capi_result) {

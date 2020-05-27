@@ -63,7 +63,8 @@ typedef void (*OnSetEncryptionDoneCallback)(MediaKeyAsyncResult result,
                                             void* userData);
 
 extern EMSSOperationResult mediaKeySetEncryption(
-    const MediaKeyConfig* config, OnSetEncryptionDoneCallback on_finished,
+    const MediaKeyConfig* config,
+    OnSetEncryptionDoneCallback on_finished,
     void* user_data);
 extern EMSSOperationResult mediaKeyRemove(int handle);
 

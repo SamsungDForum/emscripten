@@ -20,8 +20,10 @@ struct ElementaryVideoTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryVideoTrackConfig() : ElementaryMediaTrackConfig() {}
 
   ElementaryVideoTrackConfig(std::string mime_type,
-                             std::vector<uint8_t> extradata, uint32_t width,
-                             uint32_t height, uint32_t framerate_num,
+                             std::vector<uint8_t> extradata,
+                             uint32_t width,
+                             uint32_t height,
+                             uint32_t framerate_num,
                              uint32_t framerate_den)
       : ElementaryMediaTrackConfig(mime_type, extradata),
         width(width),

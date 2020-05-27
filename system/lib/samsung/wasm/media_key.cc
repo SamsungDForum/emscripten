@@ -31,7 +31,8 @@ MediaKeyConfig DRMConfigToCAPI(const DRMConfig& config) {
 
 struct MediaKey::AsyncImpl {
   static void OnCAPICallFinished(MediaKeyAsyncResult error,
-                                 int media_key_handle, void* userData) {
+                                 int media_key_handle,
+                                 void* userData) {
     auto cb = std::unique_ptr<MediaKey::SetupFinishedCallback>(
         static_cast<MediaKey::SetupFinishedCallback*>(userData));
     (*cb)(static_cast<MediaKey::AsyncResult>(error),
@@ -48,10 +49,13 @@ MediaKey& MediaKey::operator=(MediaKey&& other) {
 }
 
 MediaKey::~MediaKey() {
-  if (IsValid()) mediaKeyRemove(handle_);
+  if (IsValid())
+    mediaKeyRemove(handle_);
 }
 
-bool MediaKey::IsValid() const { return IsHandleValid(handle_); }
+bool MediaKey::IsValid() const {
+  return IsHandleValid(handle_);
+}
 
 // static
 Result<void> MediaKey::SetupEncryption(const DRMConfig& config,

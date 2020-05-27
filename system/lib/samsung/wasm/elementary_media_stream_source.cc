@@ -152,7 +152,9 @@ ElementaryMediaStreamSource::GetReadyState() const {
   return {static_cast<ReadyState>(result.value), result.operation_result};
 }
 
-const char* ElementaryMediaStreamSource::GetURL() const { return url_.get(); }
+const char* ElementaryMediaStreamSource::GetURL() const {
+  return url_.get();
+}
 
 Result<void> ElementaryMediaStreamSource::SetListener(
     ElementaryMediaStreamSourceListener* listener) {

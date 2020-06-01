@@ -922,6 +922,39 @@ const LibraryTizenEmss = {
     return EmssCommon.Result.SUCCESS;
   },
 
+  mediaElementSetOnError__deps: ['$EmssCommon','$WasmHTMLMediaElement'],
+  mediaElementSetOnError__proxy: 'sync',
+  mediaElementSetOnError: function(
+      handle, eventHandler, userData) {
+    const mediaElement = WasmHTMLMediaElement.handleMap[handle];
+    if (!mediaElement) {
+      console.warn(`No such media element: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+    return WasmHTMLMediaElement._setListener(
+      handle,
+      'error',
+      () => {
+        const mediaError = mediaElement.error;
+        const errorCode = mediaError.code;
+        const errorMessage = mediaError.message;
+        const length = lengthBytesUTF8(errorMessage) + 1;
+        const errorMessagePtr = _malloc(length);
+        stringToUTF8(errorMessage, errorMessagePtr, length);
+        {{{ makeDynCall('viii') }}} (
+          eventHandler, errorCode, errorMessagePtr, userData);
+        _free(errorMessagePtr);
+      });
+  },
+
+  mediaElementUnsetOnError__deps: ['$WasmHTMLMediaElement'],
+  mediaElementUnsetOnError__proxy: 'sync',
+  mediaElementUnsetOnError: function(handle) {
+    return WasmHTMLMediaElement._unsetListener(
+      handle,
+      'error');
+  },
+
 /*============================================================================*/
 /*= samsung::wasm::ElementaryMediaStreamSource impl:                         =*/
 /*============================================================================*/

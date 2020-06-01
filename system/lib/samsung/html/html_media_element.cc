@@ -36,6 +36,13 @@ void OnTimeUpdateEMSSCallback(void* user_data, void* element) {
     listener->OnPlaybackPositionChanged(new_time.value);
 }
 
+  void OnErrorListenerCallback(int error_code, const char* error_message,
+                               void* user_data) {
+    const auto listener =
+        static_cast<HTMLMediaElementListener*>(user_data);
+    listener->OnError(static_cast<MediaError>(error_code), error_message);
+  }
+
 }  // namespace
 
 HTMLMediaElement::HTMLMediaElement(const char* id)
@@ -194,6 +201,8 @@ wasm::Result<void> HTMLMediaElement::SetListener(
   SET_LISTENER(mediaElementSetOnWaiting, handle_,
                ListenerCallback<HTMLMediaElementListener,
                                 &HTMLMediaElementListener::OnWaiting>,
+               listener);
+  SET_LISTENER(mediaElementSetOnError, handle_, OnErrorListenerCallback,
                listener);
   return {wasm::OperationResult::kSuccess};
 }

@@ -6,6 +6,8 @@
 #ifndef INCLUDE_SAMSUNG_HTML_HTML_MEDIA_ELEMENT_LISTENER_H_
 #define INCLUDE_SAMSUNG_HTML_HTML_MEDIA_ELEMENT_LISTENER_H_
 
+#include "samsung/html/common.h"
+
 namespace samsung {
 namespace html {
 
@@ -30,6 +32,12 @@ class HTMLMediaElementListener {
   virtual void OnSeeked() {}
   virtual void OnPause() {}
   virtual void OnWaiting() {}
+
+  /// @remarks
+  /// An ownership of <code>error_msg</code> is not transferred and is valid
+  /// only for the duration of the <code>OnError()</code> call.
+  /// Do not remove this string manually!
+  virtual void OnError(MediaError, const char* /*error_msg*/) {}
 };
 
 }  // namespace html

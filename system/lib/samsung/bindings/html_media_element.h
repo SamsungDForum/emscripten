@@ -23,6 +23,8 @@ typedef enum HTMLMediaElementAsyncResult {
 
 typedef void (*OnEventCallback)(void* userData);
 typedef void (*RegisterOnTimeUpdateEMSSEventCallback)(void*, void*);
+typedef void (*OnErrorCallback)(int errorCode, const char* errorMessage,
+                                void* userData);
 
 extern int mediaElementById(const char* id);
 extern EMSSOperationResult mediaElementRemove(int handle);
@@ -109,6 +111,11 @@ extern EMSSOperationResult mediaElementRegisterOnTimeUpdateEMSS(
     void* element);
 
 extern EMSSOperationResult mediaElementUnregisterOnTimeUpdateEMSS(int handle);
+
+extern EMSSOperationResult mediaElementSetOnError(int handle,
+                                                  OnErrorCallback callback,
+                                                  void* userData);
+extern EMSSOperationResult mediaElementUnsetOnError(int handle);
 
 #ifdef __cplusplus
 }

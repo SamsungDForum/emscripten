@@ -11,6 +11,9 @@
 namespace samsung {
 namespace wasm {
 
+/// @brief
+/// Allows receiving <code>ElementaryMediaStreamSource</code> events.
+///
 /// An interface to receive updates of <code>ElementaryMediaStreamSource</code>.
 /// Object implementing this interface needs to be bound to
 /// <code>ElementaryMediaStreamSource::SetListener</code> method.

@@ -25,6 +25,10 @@ namespace html {
 
 class HTMLMediaElementListener;
 
+/// @brief
+/// Wraps <code>HTMLMediaElement</code> so that it can be used in WebAssembly
+/// code.
+///
 /// <code>HTMLMediaElement</code> is used with EMSS as a playback control
 /// element, providing operations like play, pause, seek, etc. That is,
 /// <code>HTMLMediaElement</code> controls Media Player.

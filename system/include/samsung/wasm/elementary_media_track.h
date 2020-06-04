@@ -24,12 +24,15 @@ class MediaKey;
 struct ElementaryMediaPacket;
 struct EncryptedElementaryMediaPacket;
 
+/// @brief
+/// Tracks are used to deliver either audio or video frames to WASM Player.
+///
 /// Each instance of this class represents a single elementary media track
 /// (either audio or video). The track object allows sending
 /// <code>ElementaryMediaPacket</code>s to platform for a playback.
 /// <br>
 /// Valid track objects can only be obtained through a call to
-/// <code>ElementaryMediaStreamSource::AddTrack</code>.
+/// <code>ElementaryMediaStreamSource::AddTrack()</code>.
 class ElementaryMediaTrack final {
  public:
   /// Enumerates track close reasons. Values of this enum are passed to

@@ -15,6 +15,9 @@
 namespace samsung {
 namespace wasm {
 
+/// @brief
+/// Allows receiving <code>ElementaryMediaTrack</code> events.
+///
 /// An interface to receive updates of <code>ElementaryMediaTrack</code>.
 /// Object implementing this interface needs to be bound to
 /// <code>ElementaryMediaTrack::SetListener</code> method.

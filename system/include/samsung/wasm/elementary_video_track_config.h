@@ -15,7 +15,7 @@
 namespace samsung {
 namespace wasm {
 
-/// Type describing config for audio track.
+/// Contains video <code>ElementaryMediaTrack</code> config.
 struct ElementaryVideoTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryVideoTrackConfig() : ElementaryMediaTrackConfig() {}
 

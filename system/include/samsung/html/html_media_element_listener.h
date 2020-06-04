@@ -11,6 +11,9 @@
 namespace samsung {
 namespace html {
 
+/// @brief
+/// Allows receiving <code>HTMLMediaElement</code> events.
+///
 /// An interface to receive updates of <code>HTMLMediaElement</code>. Object
 /// implementing this interface needs to be bound to
 /// <code>HTMLMediaElement::SetListener</code> method.

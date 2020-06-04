@@ -27,29 +27,38 @@ class ElementaryMediaStreamSourceListener;
 struct ElementaryAudioTrackConfig;
 struct ElementaryVideoTrackConfig;
 
-/// <code>ElementaryMediaStreamSource</code> (or EMSS for short) Player is
-/// a Samsung TV extension API which grants a WebAssembly application low level
-/// access to a Platform's media player. EMSS API operates on
-/// Elementary Stream Packet level, accepting encoded packets that are decoded
-/// and rendered by TV multimedia pipeline. Depending on operation mode, EMSS
-/// is fit to be used either as video on-demand player (normal latency mode,
-/// suitable for adaptive streaming scenarios) or as a streaming player
-/// (low latency mode).
+/// @mainpage
+/// Tizen WASM Player is a Samsung TV extension API which grants a WebAssembly
+/// application low level access to a Platform's media player. WASM Player
+/// operates on Elementary Stream Packet level, accepting encoded packets that
+/// are decoded and rendered by the TV multimedia pipeline. Depending on
+/// operation mode, it is fit to be used either as a video on-demand player
+/// (normal latency mode, suitable for adaptive streaming scenarios) or as a
+/// streaming player (low latency mode).
 ///
-/// As a low level media API, EMSS is responsible only for decoding and
+/// As a low level media API, WASM Player is responsible only for decoding and
 /// rendering media content. Acquiring media content and splitting it into
-/// Elementary Media Packets that are passed to EMSS is entirely dependent on
-/// App. This allows for a great flexibility: the application has full control
-/// over downloading data, demuxing, either low latency or adaptive streaming
-/// protocol implementation, etc. When EMSS is used major part of multimedia
-/// pipeline can be implemented as a WebAssembly module and is
+/// Elementary Media Packets that are passed to the player is entirely dependent
+/// on App. This allows for a great flexibility: the application has full
+/// control over downloading data, demuxing, either low latency or adaptive
+/// streaming protocol implementation, etc. When EMSS is used major part of
+/// multimedia pipeline can be implemented as a WebAssembly module and it is
 /// platform-independent, allowing for a wide variety of multimedia
 /// applications.
+
+/// @brief
+/// Main class of WASM Player. <code>ElementaryMediaStreamSource</code> acts as
+/// a data source for <code>HTMLMediaElement</code>.
+///
+/// <code>ElementaryMediaStreamSource</code> manages a set of <code>
+/// ElementaryMediaTrack</code> objects. <code>ElementaryMediaPacket</code>s
+/// that media consists of are sent to WASM Player via individual tracks added
+/// to the source.
 class ElementaryMediaStreamSource final {
  public:
   /// Defines modes in which <code>ElementaryMediaStreamSource</code> can
-  /// operate. The mode is set in EMSS' constructor and cannot be changed during
-  /// its lifetime.
+  /// operate. The mode is set in <code>ElementaryMediaStreamSource</code>'s
+  /// constructor and cannot be changed during its lifetime.
   enum class Mode {
     /// This mode is a default mode, appropriate for most playback scenarios.
     /// <br>

@@ -65,7 +65,7 @@ enum class ChannelLayout {
   kSurround,       ///< Front L + R + C.
 };
 
-/// Type describing config for an audio track.
+/// Contains audio <code>ElementaryMediaTrack</code> config.
 struct ElementaryAudioTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryAudioTrackConfig() : ElementaryMediaTrackConfig() {}
 

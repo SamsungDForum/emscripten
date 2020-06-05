@@ -395,9 +395,9 @@ const LibraryTizenEmss = {
             return Result.WRONG_HANDLE;
           }
           const listeners = namespace.listenerMap[handle];
-          for (const [eventName, eventHandler] of Object.entries(listeners)) {
+          listeners.forEach((eventHandler, eventName) => {
             obj.removeEventListener(eventName, eventHandler);
-          }
+          });
           namespace.listenerMap[handle] = {};
           return Result.SUCCESS;
         },
@@ -561,7 +561,11 @@ const LibraryTizenEmss = {
         ['audio', config.audioMimeType, config.audioRobustness],
         ['video', config.videoMimeType, config.videoRobustness]
       ];
-      for (const [trackType, mimeType, robustness] of configs) {
+      // Don't use destructuring assignment, as it breaks linking with -Os
+      for (const cfg of configs) {
+        const trackType = cfg[0];
+        const mimeType = cfg[1];
+        const robustness = cfg[2];
         if (mimeType) {
           supportedConfigurations[`${trackType}Capabilities`] = [{
             contentType: mimeType,

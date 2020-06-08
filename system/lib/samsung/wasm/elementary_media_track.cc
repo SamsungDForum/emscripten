@@ -78,6 +78,16 @@ void OnSeekListenerCallback(float new_time, void* user_data) {
       ->OnSeek(samsung::wasm::Seconds(new_time));
 }
 
+void OnAppendErrorListenerCallback(
+    EMSSOperationResult append_error,
+    void* user_data) {
+  using samsung::wasm::ElementaryMediaTrack;
+  using samsung::wasm::ElementaryMediaTrackListener;
+  (static_cast<ElementaryMediaTrackListener*>(user_data))
+      ->OnAppendError(
+          static_cast<samsung::wasm::OperationResult>(append_error));
+}
+
 }  // namespace
 
 namespace samsung {
@@ -100,11 +110,14 @@ class ElementaryMediaTrack::Impl {
 
   bool IsValid() const;
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
+  Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
+  Result<void> AppendEncryptedPacketAsync(const EncryptedElementaryMediaPacket&);
   Result<void> AppendEndOfTrack(SessionId session_id);
+  Result<void> AppendEndOfTrackAsync(SessionId session_id);
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
-      std::function<void(AsyncResult)> finished_callback);
+      std::function<void(OperationResult)> finished_callback);
   Result<SessionId> GetSessionId() const;
   Result<bool> IsOpen() const;
   Result<void> RecycleTexture(GLuint textureId);
@@ -117,6 +130,9 @@ class ElementaryMediaTrack::Impl {
  private:
   Result<void> AppendPacketInternal(const ElementaryMediaPacket&);
   Result<void> AppendEncryptedPacketInternal(
+      const EncryptedElementaryMediaPacket&);
+  Result<void> AppendPacketAsyncInternal(const ElementaryMediaPacket&);
+  Result<void> AppendEncryptedPacketAsyncInternal(
       const EncryptedElementaryMediaPacket&);
   OperationResult SetListenerInternal(ElementaryMediaTrackListener* listener);
 
@@ -182,6 +198,21 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacket(
   }
 }
 
+Result<void> ElementaryMediaTrack::Impl::AppendPacketAsync(
+    const samsung::wasm::ElementaryMediaPacket& packet) {
+  if (!UseEmulatedAppend(packet.session_id)) {
+    // Use default code path.
+    return AppendPacketAsyncInternal(packet);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != packet.session_id) {
+      return {OperationResult::kFailed};
+    }
+    return AppendPacketAsyncInternal(packet);
+  }
+}
+
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacket(
     const EncryptedElementaryMediaPacket& packet) {
   if (!UseEmulatedAppend(packet.session_id)) {
@@ -194,6 +225,21 @@ Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacket(
       return {OperationResult::kFailed};
     }
     return AppendEncryptedPacketInternal(packet);
+  }
+}
+
+Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketAsync(
+    const EncryptedElementaryMediaPacket& packet) {
+  if (!UseEmulatedAppend(packet.session_id)) {
+    // Use default code path.
+    return AppendEncryptedPacketAsyncInternal(packet);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != packet.session_id) {
+      return {OperationResult::kFailed};
+    }
+    return AppendEncryptedPacketAsyncInternal(packet);
   }
 }
 
@@ -216,14 +262,33 @@ Result<void> ElementaryMediaTrack::Impl::AppendEndOfTrack(
   }
 }
 
+Result<void> ElementaryMediaTrack::Impl::AppendEndOfTrackAsync(
+    SessionId app_session_id) {
+  if (!UseEmulatedAppend(app_session_id)) {
+    // Use default code path.
+    auto session_id =
+        (version_info_.has_legacy_emss ? kIgnoreSessionId : app_session_id);
+    return CAPICall<void>(elementaryMediaTrackAppendEndOfTrackAsync, handle_,
+                          session_id);
+  } else {
+    // Session id mechanism must be emulated, because legacy EMSS doesn't
+    // support it at Platform level.
+    if (emulated_session_id_.load() != app_session_id) {
+      return {OperationResult::kFailed};
+    }
+    return CAPICall<void>(elementaryMediaTrackAppendEndOfTrackAsync, handle_,
+                          kIgnoreSessionId);
+  }
+}
+
 Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrame(
     GLuint textureId,
-    std::function<void(ElementaryMediaTrack::AsyncResult)> finishedCallback) {
+    std::function<void(OperationResult)> finishedCallback) {
   if (!version_info_.has_video_texture)
     return {OperationResult::kNotSupported};
 
   return CAPIAsyncCallWithArg<
-      AsyncResult, EMSSElementaryMediaTrackAsyncOperationResult, uint32_t>(
+      OperationResult, EMSSOperationResult, uint32_t>(
       elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
       finishedCallback);
 }
@@ -293,6 +358,18 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
                         &capi_packet);
 }
 
+Result<void> ElementaryMediaTrack::Impl::AppendPacketAsyncInternal(
+    const ElementaryMediaPacket& packet) {
+  auto capi_packet = PacketToCAPI(packet);
+
+  if (version_info_.has_legacy_emss) {
+    // Legacy EMSS didn't support session_id concept.
+    capi_packet.session_id = kIgnoreSessionId;
+  }
+  return CAPICall<void>(elementaryMediaTrackAppendPacketAsync, handle_,
+                        &capi_packet);
+}
+
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
     const EncryptedElementaryMediaPacket& packet) {
   auto capi_packet = PacketToCAPI(packet);
@@ -303,6 +380,19 @@ Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
   }
 
   return CAPICall<void>(elementaryMediaTrackAppendEncryptedPacket, handle_,
+                        &capi_packet);
+}
+
+Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketAsyncInternal(
+    const EncryptedElementaryMediaPacket& packet) {
+  auto capi_packet = PacketToCAPI(packet);
+
+  if (version_info_.has_legacy_emss) {
+    // Legacy EMSS didn't support session_id concept.
+    capi_packet.base_packet.session_id = kIgnoreSessionId;
+  }
+
+  return CAPICall<void>(elementaryMediaTrackAppendEncryptedPacketAsync, handle_,
                         &capi_packet);
 }
 
@@ -317,6 +407,8 @@ OperationResult ElementaryMediaTrack::Impl::SetListenerInternal(
                 OnTrackClosedListenerCallback, listener);
     LISTENER_OP(elementaryMediaTrackSetOnSeek, handle_, OnSeekListenerCallback,
                 listener);
+    LISTENER_OP(elementaryMediaTrackSetOnAppendError, handle_,
+                OnAppendErrorListenerCallback, listener);
 
     if (!version_info_.has_legacy_emss) {
       LISTENER_OP(
@@ -396,11 +488,25 @@ Result<void> ElementaryMediaTrack::AppendPacket(
   return pimpl_->AppendPacket(packet);
 }
 
+Result<void> ElementaryMediaTrack::AppendPacketAsync(
+    const ElementaryMediaPacket& packet) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendPacketAsync(packet);
+}
+
 Result<void> ElementaryMediaTrack::AppendEncryptedPacket(
     const EncryptedElementaryMediaPacket& packet) {
   if (!pimpl_)
     return {OperationResult::kInvalidObject};
   return pimpl_->AppendEncryptedPacket(packet);
+}
+
+Result<void> ElementaryMediaTrack::AppendEncryptedPacketAsync(
+    const EncryptedElementaryMediaPacket& packet) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendEncryptedPacketAsync(packet);
 }
 
 Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId session_id) {
@@ -409,9 +515,15 @@ Result<void> ElementaryMediaTrack::AppendEndOfTrack(SessionId session_id) {
   return pimpl_->AppendEndOfTrack(session_id);
 }
 
+Result<void> ElementaryMediaTrack::AppendEndOfTrackAsync(SessionId session_id) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->AppendEndOfTrackAsync(session_id);
+}
+
 Result<void> ElementaryMediaTrack::FillTextureWithNextFrame(
     GLuint texture_id,
-    std::function<void(AsyncResult)> finished_callback) {
+    std::function<void(OperationResult)> finished_callback) {
   if (!pimpl_)
     return {OperationResult::kInvalidObject};
   return pimpl_->FillTextureWithNextFrame(texture_id,

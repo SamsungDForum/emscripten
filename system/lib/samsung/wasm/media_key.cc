@@ -30,12 +30,12 @@ MediaKeyConfig DRMConfigToCAPI(const DRMConfig& config) {
 }  // namespace
 
 struct MediaKey::AsyncImpl {
-  static void OnCAPICallFinished(MediaKeyAsyncResult error,
+  static void OnCAPICallFinished(EMSSOperationResult error,
                                  int media_key_handle,
                                  void* userData) {
     auto cb = std::unique_ptr<MediaKey::SetupFinishedCallback>(
         static_cast<MediaKey::SetupFinishedCallback*>(userData));
-    (*cb)(static_cast<MediaKey::AsyncResult>(error),
+    (*cb)(static_cast<OperationResult>(error),
           MediaKey{media_key_handle});
   }
 };

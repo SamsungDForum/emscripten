@@ -167,41 +167,6 @@ class ElementaryMediaStreamSource final {
     kEnded
   };
 
-  /// Defines results of asynchronous operation.
-  /// <br>
-  /// An async operation (such as <code>Open()</code>) can report an error in
-  /// two ways: with its return value - an error there means the job wasn't
-  /// started - and with argument passed to callback, which signals incorrect
-  /// execution of an asnyc job.
-  /// <br>
-  /// <code>#AsyncResult</code> describes the latter kind of errors.
-  enum class AsyncResult {
-    /// Operation ended with success.
-    kSuccess,
-
-    /// A change of state couldn't finish because EMSS was opening. This can
-    /// happen when <code>Close()</code> was called without waiting for
-    /// <code>Open()</code> to finish.
-    kOpenInProgressError,
-
-    /// A change of state couldn't finish because EMSS was closing. This can
-    /// happen when <code>Open()</code> was called without waiting for
-    /// <code>Close()</code> to finish.
-    kCloseInProgressError,
-
-    /// Requested operation couldn't be performed in current ready state.
-    kInvalidStateError,
-
-    /// Requested operation couldn't be performed because EMSS wasn't attached.
-    kSourceNotAttachedError,
-
-    /// <code>Open()</code> was called with no tracks attached to the source.
-    kNoTracksAttachedError,
-
-    /// Unknown error.
-    kUnknownError,
-  };
-
   /// Creates a source with the given mode. Mode cannot be changed during
   /// lifetime of the object.
   ///
@@ -284,16 +249,14 @@ class ElementaryMediaStreamSource final {
   /// another ready state change.
   ///
   /// @param[in] on_finished_callback A callback notifying end of close.
-  /// The callback receives <code>#AsyncResult</code> informing of the
+  /// The callback receives <code>OperationResult</code> informing of the
   /// result of the operation.
   ///
   /// @return <code>Result\<void\></code> with
   /// <code>operation_result</code> field set to
   /// <code>OperationResult::kSuccess</code> on success, otherwise a code
   /// describing the error.
-  ///
-  /// @sa AsyncResult
-  Result<void> Close(std::function<void(AsyncResult)> on_finished_callback);
+  Result<void> Close(std::function<void(OperationResult)> on_finished_callback);
 
   /// Starts an asynchronous opening operation. When the operation is done,
   /// the source will be in <code>ReadyState::kOpen</code> state and a
@@ -301,7 +264,7 @@ class ElementaryMediaStreamSource final {
   /// impossble to request another ready state change.
   ///
   /// @param[in] on_finished_callback A callback notifying end of open.
-  /// The callback receives <code>#AsyncResult</code> informing of the
+  /// The callback receives <code>OperationResult</code> informing of the
   /// result of the operation.
   ///
   /// @return <code>Result\<void\></code> with
@@ -311,9 +274,7 @@ class ElementaryMediaStreamSource final {
   ///
   /// @remarks This should be called when all tracks are added and configured,
   /// and the application is ready to provide data for the source.
-  ///
-  /// @sa AsyncResult
-  Result<void> Open(std::function<void(AsyncResult)> on_finished_callback);
+  Result<void> Open(std::function<void(OperationResult)> on_finished_callback);
 
   /// Returns the duration of the source.
   ///

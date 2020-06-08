@@ -30,20 +30,11 @@ typedef enum EMSSReadyState {
   EMSSReadyStateEnded,
 } EMSSReadyState;
 
-typedef enum EMSSAsyncResult {
-  EMSSAsyncResultSuccess = 0,
-  EMSSAsyncResultOpenInProgressError,
-  EMSSAsyncResultCloseInProgressError,
-  EMSSAsyncResultInvalidStateError,
-  EMSSAsyncResultSourceIsNotAttachedError,
-  EMSSAsyncResultNoTracksAttachedError,
-  EMSSAsyncResultUnknownError,
-} EMSSAsyncResult;
-
 typedef void (*OnEventCallback)(void* userData);
 typedef void (*OnPlaybackPositionChangedCallback)(float newTime,
                                                   void* userData);
-typedef void (*OnOperationDoneCallback)(EMSSAsyncResult result, void* userData);
+typedef void (*OnOperationDoneCallback)(EMSSOperationResult result,
+                                        void* userData);
 
 extern int EMSSCreate(EMSSMode latencyMode);
 extern EMSSOperationResult EMSSRemove(int handle);

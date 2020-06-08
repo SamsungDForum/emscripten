@@ -63,16 +63,6 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
-  enum class AsyncResult {
-    kSuccess,
-    kAlreadyDestroyedError,
-    kWebGLContextNotRegistedError,
-    kAlreadyInProgressError,
-    kInvalidDataError,
-    kNotSupportedError,
-    kUnknownError,
-  };
-
   /// Default constructor, creates an <b>invalid</b>
   /// <code>ElementaryMediaTrack</code> object, to be further replaced with
   /// a proper one, received with a call to
@@ -97,34 +87,113 @@ class ElementaryMediaTrack final {
   ///
   /// @param[in] packet Packet to append.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> on success,
+  /// otherwise a code describing the error.
+  ///
+  /// @remarks
+  /// <code>AppendPacket()</code> and <code>AppendPacketAsync()</code> calls
+  /// for the same track can be mixed.
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
+
+  /// Appends given <code>ElementaryMediaPacket</code> to the track
+  /// asynchronously.
+  ///
+  /// For clear packets, <code>AppendPacketAsync()</code> is functionally
+  /// equivalent to <code>AppendPacket()</code> (i.e. it will validate
+  /// the packet and return result synchronously).
+  ///
+  /// @param[in] packet Packet to append.
+  ///
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> if packet validation
+  /// and append to track was successful, otherwise a code describing
+  /// the error.
+  ///
+  /// @remarks
+  /// <code>AppendPacket()</code> and <code>AppendPacketAsync()</code> calls
+  /// for the same track can be mixed.
+  Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
 
   /// Appends given <code>EncryptedElementaryMediaPacket</code> to the track.
   ///
   /// @param[in] packet Packet to append.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> on success,
+  /// otherwise a code describing the error.
+  ///
+  /// @remarks
+  /// <code>AppendEncryptedPacketSync()</code> and
+  /// <code>AppendEncryptedPacketAsync()</code> calls for the same track
+  /// can be mixed.
+  ///
+  /// @remarks
+  /// It is recommended to use <code>AppendEncryptedPacketAsync</code> method
+  /// to append encryped packets over this method due to performance reasons
+  /// (decrypting packets takes some time, doing it synchronously may decrease
+  /// performance).
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
+
+  /// Appends given <code>EncryptedElementaryMediaPacket</code> to the track,
+  /// but decrypts it asynchronously.
+  ///
+  /// <code>AppendEncryptedPacketAsync()</code> will validate the packet and
+  /// return result synchronously. However, packet decryption will be executed
+  /// asynchronously. If decryption error occurs, it will be signalled via
+  /// <code>ElementaryMediaTrackListener::OnAppendError()</code> event.
+  ///
+  /// @param[in] packet Packet to append.
+  ///
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> if packet validation
+  /// and append to track was successful, otherwise a code describing
+  /// the error.
+  ///
+  /// @remarks
+  /// <code>AppendEncryptedPacketSync()</code> and
+  /// <code>AppendEncryptedPacketAsync()</code> calls for the same track
+  /// can be mixed.
+  ///
+  /// @remarks
+  /// It is recommended to use this method to append encryped packets over
+  /// <code>AppendEncryptedPacket</code> due to performance reasons
+  /// (decrypting packets takes some time, doing it asynchronously will improve
+  /// performance).
+  Result<void> AppendEncryptedPacketAsync(const EncryptedElementaryMediaPacket&);
 
   /// Appends special end-of-track packet to the source. Upon processing this
   /// packet, the track will end. It is advised to end all tracks at a similar
-  /// time.
+  /// time. Operation will end once track is properly closed or an error
+  /// occurs.
   ///
   /// @param[in] session_id Id of the session the end of track packet should
   /// belong to.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> on success, otherwise
+  /// a code describing the error.
   Result<void> AppendEndOfTrack(SessionId session_id);
+
+  /// Appends special end-of-track packet to the source asynchronously.
+  /// Upon processing this packet, the track will end. It is advised to end
+  /// all tracks at a similar time.
+  ///
+  /// <code>AppendEndOfTrack()</code> returns result synchronously when track
+  /// starts closing or an error occurs.
+  /// If <code>AppendEndOfTrack()</code> returns success synchronously but
+  /// in the meantime <code>SessionId</code> changes or seek operation starts,
+  /// track will not be closed and error informing that end of track append is
+  /// aborted will be signalled via
+  /// <code>ElementaryMediaTrackListener::OnAppendError()</code> event.
+  ///
+  /// @param[in] session_id Id of the session the end of track packet should
+  /// belong to.
+  ///
+  /// @return <code>Result\<void\></code> with <code>operation_result</code>
+  /// field set to <code>OperationResult::kSuccess</code> on success, otherwise
+  /// a code describing the error.
+  Result<void> AppendEndOfTrackAsync(SessionId session_id);
 
   /// Fills provided texture with a decoded video frame.
   /// Player will decode frames sent with
@@ -159,7 +228,7 @@ class ElementaryMediaTrack final {
   /// @sa <code>ElementaryMediaTrack::RecycleTexture</code>
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
-      std::function<void(AsyncResult)> finished_callback);
+      std::function<void(OperationResult)> finished_callback);
 
   /// Returns id of the currently active session.
   ///

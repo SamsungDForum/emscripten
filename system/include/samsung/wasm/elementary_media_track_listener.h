@@ -81,6 +81,15 @@ class ElementaryMediaTrackListener {
   /// @sa ElementaryMediaPacket::session_id
   /// @sa ElementaryMediaTrackListener::OnSeek
   virtual void OnSessionIdChanged(SessionId /*session_id*/) {}
+
+  /// Fired when one of async append methods fails:
+  /// @sa ElementaryMediaTrack::AppendPacketAsync()
+  /// @sa ElementaryMediaTrack::AppendEncryptedPacketAsync()
+  /// @sa ElementaryMediaTrack::AppendEndOfTrackAsync()
+  /// Error Code is passed as an argument.
+  ///
+  /// @param[in] operation_result Error code representing append error.
+  virtual void OnAppendError(OperationResult /*operation_result*/) {}
 };
 
 }  // namespace wasm

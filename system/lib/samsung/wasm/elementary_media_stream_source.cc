@@ -130,16 +130,14 @@ Result<void> ElementaryMediaStreamSource::Flush() {
 }
 
 Result<void> ElementaryMediaStreamSource::Close(
-    std::function<void(ElementaryMediaStreamSource::AsyncResult)>
-        on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(on_finished_callback,
+    std::function<void(OperationResult)>on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
                                                      EMSSClose, handle_);
 }
 
 Result<void> ElementaryMediaStreamSource::Open(
-    std::function<void(ElementaryMediaStreamSource::AsyncResult)>
-        on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult, EMSSAsyncResult>(on_finished_callback,
+    std::function<void(OperationResult)>on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
                                                      EMSSOpen, handle_);
 }
 

@@ -14,13 +14,6 @@
 extern "C" {
 #endif
 
-typedef enum HTMLMediaElementAsyncResult {
-  HTMLMediaElementAsyncResultSuccess = 0,
-  HTMLMediaElementAsyncResultNotAllowedError,
-  HTMLMediaElementAsyncResultNotSupportedError,
-  HTMLMediaElementAsyncResultUnknownError,
-} HTMLMediaElementAsyncResult;
-
 typedef void (*OnEventCallback)(void* userData);
 typedef void (*RegisterOnTimeUpdateEMSSEventCallback)(void*, float);
 typedef void (*OnErrorCallback)(int errorCode, const char* errorMessage,
@@ -44,7 +37,7 @@ extern EMSSOperationResult mediaElementGetSrc(int handle, char** out);
 extern EMSSOperationResult mediaElementSetSrc(int handle, const char* newSrc);
 extern EMSSOperationResult mediaElementPlay(
     int handle,
-    void (*finishedCallback)(HTMLMediaElementAsyncResult result,
+    void (*finishedCallback)(EMSSOperationResult result,
                              void* userData),
     void* userData);
 extern EMSSOperationResult mediaElementPause(int handle);

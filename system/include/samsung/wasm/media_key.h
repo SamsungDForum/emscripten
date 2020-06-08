@@ -25,7 +25,7 @@ enum class EncryptionMode {
 
 /// Lists supported Content Decryption Modules.
 enum class ContentDecryptionModule {
-  kUnknown,    ///< Unknonw CDM.
+  kUnknown,    ///< Unknown CDM.
   kPlayready,  ///< Playready CDM.
   kWidevine,   ///< Widevine classic CDM.
 };
@@ -70,15 +70,7 @@ struct DRMConfig {
 /// Class representing an instance of media keys used to decrypt a content.
 class MediaKey final {
  public:
-  /// @copydoc ElementaryMediaStreamSource::AsyncResult
-  enum class AsyncResult {
-    kSuccess,                    ///< Operation ended with success.
-    kInvalidConfigurationError,  ///< Configuration was invalid.
-    kSessionNotUpdatedError,     ///< Attempt to update the session failed.
-    kUnknownError,               ///< Unknown error.
-  };
-
-  using SetupFinishedCallback = std::function<void(AsyncResult, MediaKey)>;
+  using SetupFinishedCallback = std::function<void(OperationResult, MediaKey)>;
 
   MediaKey(const MediaKey&) = delete;
   MediaKey(MediaKey&& other);
@@ -100,7 +92,7 @@ class MediaKey final {
   ///
   /// @param[in] config An object containing DRM's configuration.
   /// @param[in] on_finished A callback notifying end of setting up encryption.
-  /// The callback receives <code>#AsyncResult</code> informing of the
+  /// The callback receives <code>OperationResult</code> informing of the
   /// result of the operation and a newly created <code>MediaKeys</code> object.
   ///
   /// @return <code>Result\<void\></code> with

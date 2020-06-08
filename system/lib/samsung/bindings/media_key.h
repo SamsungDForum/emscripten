@@ -51,14 +51,7 @@ typedef struct MediaKeyConfig {
   MediaKeyRobustness video_robustness;
 } MediaKeyConfig;
 
-typedef enum MediaKeyAsyncResult {
-  MediaKeyAsyncResultSuccess = 0,
-  MediaKeyAsyncResultInvalidConfigurationError,
-  MediaKeyAsyncResultSessionNotUpdatedError,
-  MediaKeyAsyncResultUnknownError,
-} MediaKeyAsyncResult;
-
-typedef void (*OnSetEncryptionDoneCallback)(MediaKeyAsyncResult result,
+typedef void (*OnSetEncryptionDoneCallback)(EMSSOperationResult result,
                                             int media_key_handle,
                                             void* userData);
 

@@ -70,13 +70,162 @@ const LibraryTizenEmss = {
         SUCCESS: 0,
         WRONG_HANDLE: 1,
         INVALID_ARGUMENT: 2,
-        LISTENER_ALREADY_SET: 3,
-        NO_SUCH_LISTENER: 4,
-        NOT_SUPPORTED: 5,
-        FAILED: 6,
+        INVALID_STATE: 3,
+        LISTENER_ALREADY_SET: 4,
+        NO_SUCH_LISTENER: 5,
+        NOT_ALLOWED: 6,
+        NOT_SUPPORTED: 7,
+        ALREADY_DESTROYED: 8,
+        ALREADY_IN_PROGRESS: 9,
+        CLOSE_IN_PROGRESS: 10,
+        NOT_ALLOWED_IN_CURRENT_MODE: 11,
+        NO_TRACKS_ATTACHED: 12,
+        OPEN_IN_PROGRESS: 13,
+        PLAYBACK_STATE_CHANGE_IN_PROGRESS: 14,
+        SOURCE_MUST_BE_CLOSED: 15,
+        SOURCE_NOT_ATTACHED: 16,
+        TIMESTAMPS_EXCEED_DURATION: 17,
+        TRACK_LIMIT_REACHED: 18,
+        UNRELATED_OBJECT: 19,
+        FAILED: 20,
+
+        // Config verification errors:
+        INVALID_CHANNEL_LAYOUT: 21,
+        INVALID_CODEC: 22,
+        INVALID_FRAMERATE: 23,
+        INVALID_RESOLUTION: 24,
+        INVALID_MIME_TYPE: 25,
+        INVALID_SAMPLE_FORMAT: 26,
+        INVALID_CONFIG: 27,
+
+        // Packet append errors:
+        ABORTED: 28,
+        BUFFER_FULL: 29,
+        EXPECTS_KEYFRAME: 30,
+        APPEND_IGNORED: 31,
+        NO_DURATION: 32,
+        INVALID_DTS: 33,
+        INVALID_PTS: 34,
+        INVALID_TRACK_STATE: 35,
+        INVALID_VIDEO_PARAMETERS: 36,
+        NO_PACKET_DATA: 37,
+        RESOURCE_ALLOCATION: 38,
+
+        // Encrypted packet append errors:
+        DECRYPTION_ERROR: 39,
+        DECRYPTOR_NEEDS_MORE_DATA: 40,
+        NO_DECRYPTION_KEY: 41,
+        INVALID_INITIALIZATION_VECTOR: 42,
+        INVALID_KEY_ID: 43,
+        INVALID_MEDIA_KEY_SESSION: 44,
+        INVALID_SUBSAMPLE_DESCRIPTION: 45,
+        UNKNOWN_DECRYPTION_MODE: 46,
+
+        // Media key errors:
+        INVALID_CONFIGRUATION: 47,
+        SESSION_NOT_UPDATED: 48,
+
+        // Video decoder errors:
+        INVALID_TRACK_TYPE: 49,
+        INVALID_VIDEO_TEXTURE: 50,
+        WEBGL_CONTEXT_NOT_REGISTERED: 51,
+        NOT_IN_VIDEO_TEXTURE_MODE: 52,
       });
 
       // C++ -> JS conversion maps (int-indexed arrays)
+
+      const ERROR_TO_RESULT = new Map([
+        // Elementary Media Stream Source errors:
+        [ 'Adding new tracks is allowed only in \'closed\' state',            Result.SOURCE_MUST_BE_CLOSED         ],
+        [ 'Cannot remove provided track: provided track was not created ' +
+          'by this Elementary Media Stream Source instance.',                 Result.UNRELATED_OBJECT              ],
+        [ 'Cannot set duration of a detached ElementaryMediaStreamSource.',   Result.SOURCE_NOT_ATTACHED           ],
+        [ 'Duration cannot be set in Low Latency mode.',                      Result.NOT_ALLOWED_IN_CURRENT_MODE   ],
+        [ 'ElementaryMediaStreamSource is not attached to HTMLMediaElement.', Result.SOURCE_NOT_ATTACHED           ],
+        [ 'Exceeded maximum number of supported audio tracks (1)',            Result.TRACK_LIMIT_REACHED           ],
+        [ 'Exceeded maximum number of supported video tracks (1)',            Result.TRACK_LIMIT_REACHED           ],
+        [ 'Not attached to HTMLMediaElement.',                                Result.SOURCE_NOT_ATTACHED           ],
+        [ 'Removing tracks is allowed only in \'closed\' state',              Result.SOURCE_MUST_BE_CLOSED         ],
+        [ 'Setting duration below highest presentation timestamp of any buffered ' +
+          'coded frames is disallowed. Instead, first call \'flush\'',        Result.TIMESTAMPS_EXCEED_DURATION    ],
+        [ 'Cannot call while ElementaryMediaStreamSource.open() ' +
+          'is in progress.',                                                  Result.OPEN_IN_PROGRESS              ],
+        [ 'Cannot call while ElementaryMediaStreamSource.close() ' +
+          'is in progress.',                                                  Result.CLOSE_IN_PROGRESS             ],
+        [ 'Cannot invoke operation in the current readyState.',               Result.INVALID_STATE                 ],
+        [ 'ElementaryMediaStreamSource is not attached to HTMLMediaElement.', Result.SOURCE_NOT_ATTACHED           ],
+        [ 'Cannot open ElementaryMediaStreamSource with no tracks attached.', Result.NO_TRACKS_ATTACHED            ],
+        // Variant of the above with misplaced dot due to bugged string in platform...
+        [ 'Cannot open ElementaryMediaStreamSource.with no tracks attached.', Result.NO_TRACKS_ATTACHED            ],
+        [ 'Player was already destroyed.',                                    Result.ALREADY_DESTROYED             ],
+        [ 'Unknown error',                                                    Result.FAILED                        ],
+
+        // Config verification errors:
+        [ 'Invalid channel layout',                                           Result.INVALID_CHANNEL_LAYOUT        ],
+        [ 'Invalid codec',                                                    Result.INVALID_CODEC                 ],
+        [ 'Invalid framerate',                                                Result.INVALID_FRAMERATE             ],
+        [ 'Invalid resolution',                                               Result.INVALID_RESOLUTION            ],
+        [ 'No framerate in video config',                                     Result.INVALID_FRAMERATE             ],
+        [ 'No mimetype in config',                                            Result.INVALID_MIME_TYPE             ],
+        [ 'No resolution in video config',                                    Result.INVALID_RESOLUTION            ],
+        [ 'Unknown audio codec',                                              Result.INVALID_CODEC                 ],
+        [ 'Unknown sample format',                                            Result.INVALID_SAMPLE_FORMAT         ],
+        [ 'Invalid video codec',                                              Result.INVALID_CODEC                 ],
+
+        // Packet append errors:
+        [ 'Append failed: aborted',                                           Result.ABORTED                       ],
+        [ 'Append failed: cannot allocate internal resource',                 Result.RESOURCE_ALLOCATION           ],
+        [ 'Append failed: buffer full',                                       Result.BUFFER_FULL                   ],
+        [ 'Append failed: decryption error',                                  Result.DECRYPTION_ERROR              ],
+        [ 'Append failed: more data needed',                                  Result.DECRYPTOR_NEEDS_MORE_DATA     ],
+        [ 'Append failed: invalid track state',                               Result.INVALID_TRACK_STATE           ],
+        [ 'Append failed: keyframe required',                                 Result.EXPECTS_KEYFRAME              ],
+        [ 'Append failed: no decryption key',                                 Result.NO_DECRYPTION_KEY             ],
+        [ 'Append failed: no media key session',                              Result.INVALID_MEDIA_KEY_SESSION     ],
+        [ 'Append failed: unknown encryption',                                Result.UNKNOWN_DECRYPTION_MODE       ],
+        [ 'Append failed: given set of video codec parameters (resolution ' +
+          'and FPS) is unsupported',                                          Result.INVALID_VIDEO_PARAMETERS      ],
+        [ 'Append failed: no framerate',                                      Result.INVALID_FRAMERATE             ],
+        [ 'Append failed: no resolution',                                     Result.INVALID_RESOLUTION            ],
+        [ 'Append failed: wrong session_id',                                  Result.APPEND_IGNORED                ],
+        [ 'Append failed: unknown error',                                     Result.FAILED                        ],
+        [ 'Append packet failed: missing pts',                                Result.INVALID_PTS                   ],
+        [ 'Append packet failed: missing dts',                                Result.INVALID_DTS                   ],
+        [ 'Append packet failed: negative pts',                               Result.INVALID_PTS                   ],
+        [ 'Append packet failed: negative dts',                               Result.INVALID_DTS                   ],
+        [ 'Append packet failed: missing duration',                           Result.NO_DURATION                   ],
+        [ 'Append packet failed: if resolution is specified, both width ' +
+          'and height must be provided',                                      Result.INVALID_RESOLUTION            ],
+        [ 'Append packet failed: if framerate is specified, both ' +
+          'framerateNum and framerateDen must be provided',                   Result.INVALID_FRAMERATE             ],
+        [ 'Encrypted content in Video Texture mode is not supported.',        Result.NOT_ALLOWED_IN_CURRENT_MODE   ],
+        [ 'Append packet failed: encrypted packet has no encrypted ' +
+          'subsample description',                                            Result.INVALID_SUBSAMPLE_DESCRIPTION ],
+        [ 'Append packet failed: each subsample must contain both '+
+          'clearBytes and encryptedBytes fields',                             Result.INVALID_SUBSAMPLE_DESCRIPTION ],
+        [ 'Append packet failed: missing keyId',                              Result.INVALID_KEY_ID                ],
+        [ 'Append packet failed: bad keyId',                                  Result.INVALID_KEY_ID                ],
+        [ 'Append packet failed: missing initializationVector',               Result.INVALID_INITIALIZATION_VECTOR ],
+        [ 'Append packet failed: bad initializationVector',                   Result.INVALID_INITIALIZATION_VECTOR ],
+        [ 'Append packet failed: missing encryptionMode',                     Result.UNKNOWN_DECRYPTION_MODE       ],
+        [ 'Packet has no data.',                                              Result.NO_PACKET_DATA                ],
+        [ 'Only one append is allowed at a time!',                            Result.ALREADY_IN_PROGRESS           ],
+        [ 'Calling blocking append packet on main js thread is not allowed',  Result.NOT_ALLOWED                   ],
+
+        // Video decoder errors:
+        [ 'getPicture is already in progress',                                Result.ALREADY_IN_PROGRESS           ],
+        [ 'This functionality is available only for video tracks.',           Result.INVALID_TRACK_TYPE            ],
+        [ 'This functionality is available only for VideoTexture mode.',      Result.NOT_IN_VIDEO_TEXTURE_MODE     ],
+        [ 'Invalid video texture provided.',                                  Result.INVALID_VIDEO_TEXTURE         ],
+        [ 'Provided texture was not returned by getPicture method',           Result.INVALID_VIDEO_TEXTURE         ],
+        [ 'Calling blocking get picture on main js thread is not allowed',    Result.NOT_ALLOWED                   ],
+        [ 'WebGL rendering context not registered.',                          Result.WEBGL_CONTEXT_NOT_REGISTERED  ],
+
+        // HTML Media Element errors:
+        [ 'NotAllowedError',                                                  Result.NOT_ALLOWED                   ],
+        [ 'NotSupportedError',                                                Result.NOT_SUPPORTED                 ],
+        [ 'UnknownError',                                                     Result.FAILED                        ],
+      ]);
 
       CHANNEL_LAYOUT_TO_STRING = [
         "ChannelLayoutNone",
@@ -176,8 +325,8 @@ const LibraryTizenEmss = {
           try {
             obj[property] = value;
           } catch (error) {
-            console.error(error);
-            return Result.INVALID_ARGUMENT;
+            console.error(error.message);
+            return EmssCommon._exceptionToErrorCode(error);
           }
           return Result.SUCCESS;
         },
@@ -215,6 +364,21 @@ const LibraryTizenEmss = {
             return stringArray[defaultValueIndex];
           }
           return ret;
+        },
+        _exceptionToErrorCode: function(error) {
+          if (error == null) {
+            return Result.SUCCESS;
+          }
+          let errorMessage = error.message;
+          const splitLine = errorMessage.search("': ");
+          const errMsgLength = errorMessage.length;
+          if(splitLine != -1) {
+            errorMessage = errorMessage.slice(splitLine + 3, errMsgLength);
+          }
+          if (ERROR_TO_RESULT.has(errorMessage)) {
+            return ERROR_TO_RESULT.get(errorMessage);
+          }
+          return Result.FAILED;
         },
         _sampleFormatToString: function(sampleFormat) {
           return EmssCommon._cEnumToString(
@@ -412,15 +576,6 @@ const LibraryTizenEmss = {
   $EmssMediaKey__deps: ['$EmssCommon'],
   $EmssMediaKey: {
     handleMap: [],
-    // Matches samsung::wasm::MediaKey::AsyncResult
-    // ...but it also maps an event.error value to an error code.
-    AsyncResult: {
-      Success: 0,
-      InvalidConfigurationError: 1,
-      SessionNotUpdatedError: 2,
-      UnknownError: 3,
-    },
-
     _cdmToString: function(cdm) {
       return EmssCommon._cEnumToString([
           'unknown',
@@ -611,8 +766,9 @@ const LibraryTizenEmss = {
     let config = {};
     try {
       config = EmssMediaKey._makeDRMConfigFromPtr(configPtr);
-    } catch (e) {
-      return EmssCommon.Result.INVALID_ARGUMENT;
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
     EmssMediaKey._setupMediaKey(config).then(
       ([mediaKeys, mediaKeySession]) => {
@@ -623,14 +779,12 @@ const LibraryTizenEmss = {
         };
         {{{ makeDynCall('viii') }}} (
           onFinished,
-          EmssMediaKey.AsyncResult.Success,
+          EmssCommon.Result.SUCCESS,
           id,
           userData);
       }).catch((error) => {
-        const errorCode =
-          error.message in EmssMediaKey.AsyncResult
-            ? EmssMediaKey.AsyncResult[error.message]
-            : EmssMediaKey.AsyncResult.UnknownError;
+        console.error(error.message);
+        const errorCode = EmssCommon._exceptionToErrorCode(error);
         {{{ makeDynCall('viii') }}} (onFinished, errorCode, -1, userData);
       });
     return EmssCommon.Result.SUCCESS;
@@ -645,7 +799,16 @@ const LibraryTizenEmss = {
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
-    obj.mediaKeySession.close();
+    try {
+      obj.mediaKeySession.close().catch((exception) => {
+        console.error(`failed to close media key session:` +
+                      `'${exception.message}'`);
+      });
+    } catch (exception) {
+      console.error(`failed to close media key session:` +
+                    `'${exception.message}'`);
+      return EmssCommon.Result.FAILED;
+    }
 
     return EmssCommon.Result.SUCCESS;
   },
@@ -658,22 +821,6 @@ const LibraryTizenEmss = {
   $WasmHTMLMediaElement__postset: 'WasmHTMLMediaElement.init();',
   $WasmHTMLMediaElement: {
     init: function() {
-      // Matches samsung::html::HTMLMediaElement::AsyncResult
-      const AsyncResult = Object.freeze({
-        SUCCESS: 0,
-        NOT_ALLOWED_ERROR: 1,
-        NOT_SUPPORTED_ERROR: 2,
-        UNKNOWN_ERROR: 3,
-      });
-
-      // JS -> C++ conversion maps
-
-      const ERROR_TO_ASYNC_RESULT = new Map([
-        ['NotAllowedError',   AsyncResult.NOT_ALLOWED_ERROR   ],
-        ['NotSupportedError', AsyncResult.NOT_SUPPORTED_ERROR ],
-        ['UnknownError',      AsyncResult.UNKNOWN_ERROR       ],
-      ]);
-
       WasmHTMLMediaElement = {
         handleMap: [],
         listenerMap: {},
@@ -689,7 +836,7 @@ const LibraryTizenEmss = {
           return EmssCommon._callAsyncFunction(
             WasmHTMLMediaElement.handleMap,
             handle,
-            WasmHTMLMediaElement._getAsyncResult,
+            EmssCommon._exceptionToErrorCode,
             onFinished,
             userData,
             name,
@@ -710,15 +857,6 @@ const LibraryTizenEmss = {
         _unsetListener: function(handle, eventName) {
           return EmssCommon._unsetListener(
             WasmHTMLMediaElement, handle, eventName);
-        },
-        _getAsyncResult: function(error) {
-          if (error == null) {
-            return AsyncResult.SUCCESS;
-          }
-          if (ERROR_TO_ASYNC_RESULT.has(error.message)) {
-            return ERROR_TO_ASYNC_RESULT.get(error.message);
-          }
-          return AsyncResult.UNKNOWN_ERROR;
         },
       };
     },
@@ -856,8 +994,8 @@ const LibraryTizenEmss = {
     try {
       mediaElement.src = UTF8ToString(newSrc);
     } catch (error) {
-      console.error(error);
-      return EmssCommon.Result.INVALID_ARGUMENT;
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
     return EmssCommon.Result.SUCCESS;
   },
@@ -1016,17 +1154,6 @@ const LibraryTizenEmss = {
   $WasmElementaryMediaStreamSource__postset: 'WasmElementaryMediaStreamSource.init();',
   $WasmElementaryMediaStreamSource: {
     init: function() {
-      // Matches samsung::wasm::ElementaryMediaStreamSource::AsyncResult
-      const AsyncResult = Object.freeze({
-        SUCCESS: 0,
-        OPEN_IN_PROGRESS_ERROR: 1,
-        CLOSE_IN_PROGRESS_ERROR: 2,
-        INVALID_STATE_ERROR: 3,
-        SOURCE_NOT_ATTACHED_ERROR: 4,
-        NO_TRACKS_ATTACHED_ERROR: 5,
-        UNKNOWN_ERROR: 6,
-      });
-
       // Matches samsung::wasm::ElementaryMediaStreamSource::Mode
       const Mode = Object.freeze({
         NORMAL: 0,
@@ -1044,16 +1171,6 @@ const LibraryTizenEmss = {
       });
 
       // JS -> C++ conversion maps
-
-      const ERROR_TO_ASYNC_RESULT = new Map([
-        ['Cannot call while ElementaryMediaStreamSource.open() is in progress.',  AsyncResult.OPEN_IN_PROGRESS_ERROR    ],
-        ['Cannot call while ElementaryMediaStreamSource.close() is in progress.', AsyncResult.CLOSE_IN_PROGRESS_ERROR   ],
-        ['Cannot invoke operation in the current readyState.',                    AsyncResult.INVALID_STATE_ERROR       ],
-        ['ElementaryMediaStreamSource is not attached to HTMLMediaElement.',      AsyncResult.SOURCE_NOT_ATTACHED_ERROR ],
-        ['Cannot open ElementaryMediaStreamSource with no tracks attached.',      AsyncResult.NO_TRACKS_ATTACHED_ERROR  ],
-        // Variant of the above with misplaced dot due to bugged string in platform...
-        ['Cannot open ElementaryMediaStreamSource.with no tracks attached.',      AsyncResult.NO_TRACKS_ATTACHED_ERROR  ],
-      ]);
 
       const STR_TO_MODE = new Map([
         ['normal',      Mode.NORMAL      ],
@@ -1084,7 +1201,7 @@ const LibraryTizenEmss = {
           return EmssCommon._callAsyncFunction(
             WasmElementaryMediaStreamSource.handleMap,
             handle,
-            WasmElementaryMediaStreamSource._getAsyncResult,
+            EmssCommon._exceptionToErrorCode,
             onFinishedCallback,
             userData,
             name,
@@ -1117,8 +1234,8 @@ const LibraryTizenEmss = {
             track = WasmElementaryMediaStreamSource._getAddTrackFunction(
               type, elementaryMediaStreamSource)(config);
           } catch (error) {
-            console.error(error);
-            return EmssCommon.Result.FAILED;
+            console.error(error.message);
+            return EmssCommon._exceptionToErrorCode(error);
           }
           const trackHandle = track.trackId;
           WasmElementaryMediaTrack.handleMap[trackHandle] = track;
@@ -1163,15 +1280,6 @@ const LibraryTizenEmss = {
         _unsetListener: function(handle, eventName) {
           return EmssCommon._unsetListener(
             WasmElementaryMediaStreamSource, handle, eventName);
-        },
-        _getAsyncResult: function(error) {
-          if (error == null) {
-            return AsyncResult.SUCCESS;
-          }
-          if (ERROR_TO_ASYNC_RESULT.has(error.message)) {
-            return ERROR_TO_ASYNC_RESULT.get(error.message);
-          }
-          return AsyncResult.UNKNOWN_ERROR;
         },
       };
     },
@@ -1403,17 +1511,6 @@ const LibraryTizenEmss = {
         ['unknown',        CloseReason.UNKNOWN         ],
       ]);
 
-      // Matches samsung::wasm::ElementaryMediaTrack::AsyncResult
-      const AsyncResult = Object.freeze({
-        SUCCESS: 0,
-        ALREADY_DESTROYED_ERROR: 1,
-        WEBGL_CONTEXT_NOT_REGISTERED_ERROR: 2,
-        ALREADY_IN_PROGRESS_ERROR: 3,
-        INVALID_DATA_ERROR: 4,
-        NOT_SUPPORTED_ERROR: 5,
-        UNKNOWN_ERROR: 6,
-      });
-
       WasmElementaryMediaTrack = {
         handleMap: [],
         listenerMap: {},
@@ -1429,32 +1526,12 @@ const LibraryTizenEmss = {
           return EmssCommon._callAsyncFunction(
             WasmElementaryMediaTrack.handleMap,
             handle,
-            WasmElementaryMediaTrack._getAsyncResult,
+            EmssCommon._exceptionToErrorCode,
             onFinished,
             userData,
             name,
             ...args);
         },
-        _getAsyncResult: function(error) {
-            if (error == null) {
-              return AsyncResult.SUCCESS;
-            }
-            if (error instanceof DOMException) {
-              switch (error.name) {
-                case 'InvalidStateError':
-                  return AsyncResult.ALREADY_DESTROYED_ERROR;
-                case 'ConstraintError':
-                  return AsyncResult.WEBGL_CONTEXT_NOT_REGISTERED_ERROR;
-                case 'DataError':
-                  return AsyncResult.INVALID_DATA_ERROR;
-                case 'InvalidNodeTypeError':
-                  return AsyncResult.NOT_SUPPORTED_ERROR;
-                default:
-                  return AsyncResult.UNKNOWN_ERROR;
-              }
-            }
-            return AsyncResult.UNKNOWN_ERROR;
-          },
         _getProperty: function(handle, property, retPtr, type) {
           return EmssCommon._getProperty(
             WasmElementaryMediaTrack.handleMap,
@@ -1480,21 +1557,6 @@ const LibraryTizenEmss = {
           return EmssCommon._unsetListener(
             WasmElementaryMediaTrack, handle, eventName);
         },
-        _videoDecoderExceptionToErrorCode(ex) {
-          if (ex instanceof DOMException) {
-            switch (ex.name) {
-              case 'DataError':
-                return EmssCommon.Result.INVALID_ARGUMENT;
-              case 'InvalidNodeTypeError':
-                return EmssCommon.Result.WRONG_HANDLE;
-              case 'NotSupportedError':
-                return EmssCommon.Result.NOT_SUPPORTED;
-              default:
-                return EmssCommon.Result.FAILED;
-            }
-          }
-          return EmssCommon.Result.FAILED;
-        }
       };
     },
   },
@@ -1526,7 +1588,23 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
-      return EmssCommon.Result.FAILED;
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
+    }
+  },
+
+  elementaryMediaTrackAppendPacketAsync__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackAppendPacketAsync: function(handle, packetPtr) {
+    try {
+      const packet = EmssCommon._makePacketFromPtr(packetPtr);
+      const data = EmssCommon._makePacketDataFromPtr(packetPtr);
+
+      tizentvwasm.SideThreadElementaryMediaTrack.appendPacketAsync(
+            handle, packet, data);
+      return EmssCommon.Result.SUCCESS;
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
 
@@ -1541,8 +1619,24 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
-      console.error(error);
-      return EmssCommon.Result.FAILED;
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
+    }
+  },
+
+  elementaryMediaTrackAppendEncryptedPacketAsync__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackAppendEncryptedPacketAsync: function(handle, packetPtr) {
+    try {
+      const packet = EmssCommon._makePacketFromPtr(packetPtr);
+      EmssCommon._extendPacketToEncrypted(packet, packetPtr);
+      const data = EmssCommon._makePacketDataFromPtr(packetPtr);
+
+      tizentvwasm.SideThreadElementaryMediaTrack.appendPacketAsync(
+            handle, packet, data);
+      return EmssCommon.Result.SUCCESS;
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
 
@@ -1557,9 +1651,27 @@ const LibraryTizenEmss = {
       }
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
-      return EmssCommon.Result.FAILED;
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
+
+  elementaryMediaTrackAppendEndOfTrackAsync__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackAppendEndOfTrackAsync: function(handle, sessionId) {
+    try {
+      if (sessionId !== EmssCommon.IGNORE_SESSION_ID) {
+        tizentvwasm.SideThreadElementaryMediaTrack.appendEndOfTrackAsync(
+            handle, sessionId);
+      } else {
+        tizentvwasm.SideThreadElementaryMediaTrack.appendEndOfTrackAsync(handle);
+      }
+      return EmssCommon.Result.SUCCESS;
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
+    }
+  },
+
 
   elementaryMediaTrackFillTextureWithNextFrame__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackFillTextureWithNextFrame__proxy: 'sync',
@@ -1569,8 +1681,9 @@ const LibraryTizenEmss = {
     try {
       return WasmElementaryMediaTrack._callAsyncFunction(
         handle, onFinished, userData, 'getPicture', webGLTexture);
-    } catch (ex) {
-      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
 
@@ -1600,8 +1713,9 @@ const LibraryTizenEmss = {
     try {
       return WasmElementaryMediaTrack._callFunction(
         handle, 'recyclePicture', videoPicture);
-    } catch (ex) {
-      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
 
@@ -1612,8 +1726,9 @@ const LibraryTizenEmss = {
     try {
       return WasmElementaryMediaTrack._callFunction(
         handle, 'setWebGLRenderingContext', webGLContext);
-    } catch (ex) {
-      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
     }
   },
 
@@ -1626,6 +1741,28 @@ const LibraryTizenEmss = {
     }
     return WasmElementaryMediaTrack._callFunction(
       handle, 'setMediaKeySession', mediaKeys.mediaKeySession);
+  },
+
+  elementaryMediaTrackSetOnAppendError__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackSetOnAppendError__proxy: 'sync',
+  elementaryMediaTrackSetOnAppendError: function(
+      handle, eventHandler, userData) {
+    return WasmElementaryMediaTrack._setListener(
+      handle,
+      'appenderror',
+      (event) => {
+        const appendError = event.error;
+        const asyncAppendResult = EmssCommon._exceptionToErrorCode(appendError);
+        {{{ makeDynCall('vii') }}} (eventHandler, asyncAppendResult, userData);
+      });
+  },
+
+  elementaryMediaTrackUnsetSetOnAppendError__deps: ['$WasmElementaryMediaTrack'],
+  elementaryMediaTrackUnsetSetOnAppendError__proxy: 'sync',
+  elementaryMediaTrackUnsetSetOnAppendError: function(handle) {
+    return WasmElementaryMediaTrack._unsetListener(
+      handle,
+      'appenderror');
   },
 
   elementaryMediaTrackSetOnTrackClosed__deps: ['$WasmElementaryMediaTrack'],

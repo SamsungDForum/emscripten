@@ -135,8 +135,8 @@ wasm::Result<void> HTMLMediaElement::SetSrc(
 }
 
 wasm::Result<void> HTMLMediaElement::Play(
-    std::function<void(HTMLMediaElement::AsyncResult)> on_finished_callback) {
-  return CAPIAsyncCall<AsyncResult, HTMLMediaElementAsyncResult>(
+    std::function<void(wasm::OperationResult)> on_finished_callback) {
+  return CAPIAsyncCall<wasm::OperationResult, EMSSOperationResult>(
       on_finished_callback, mediaElementPlay, handle_);
 }
 

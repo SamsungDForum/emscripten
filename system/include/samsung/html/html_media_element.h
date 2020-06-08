@@ -18,6 +18,7 @@ namespace wasm {
 
 class ElementaryMediaStreamSource;
 class ElementaryMediaStreamSourceListener;
+enum class OperationResult;
 
 }  // namespace wasm
 
@@ -58,12 +59,7 @@ class HTMLMediaElement final {
     kHaveFutureData,
     kHaveEnoughData,
   };
-  enum class AsyncResult {
-    kSuccess,
-    kNotAllowedError,
-    kNotSupportedError,
-    kUnknownError,
-  };
+
   /// Constructs <code>HTMLMediaElement</code> corresponding to an HTML element
   /// with a given id. Provided element must exist, otherwise object will be
   /// ill-constructed.
@@ -125,7 +121,8 @@ class HTMLMediaElement final {
   /// describing the error.
   wasm::Result<void> SetSrc(wasm::ElementaryMediaStreamSource* source);
 
-  wasm::Result<void> Play(std::function<void(AsyncResult)> finished_callback);
+  wasm::Result<void> Play(
+      std::function<void(wasm::OperationResult)> finished_callback);
   wasm::Result<void> Pause();
 
   /// Sets a listener to receive updates about HTMLMediaElement. Only one

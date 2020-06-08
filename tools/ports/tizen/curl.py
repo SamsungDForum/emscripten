@@ -10,6 +10,11 @@ import shutil
 TAG = '7.68.0'
 HASH = 'ad7390fd700cb74db356a39e842dab011823b87d4047687f2a8c2e0f2920a4f8c6c193ba56391489a75939cc5c39a4dccec4e4ceeac516eb7394f03e0fb7aeae'
 
+
+def get_libname(ports):
+  return ports.get_lib_name('libcurl')
+
+
 def get(ports, settings, shared):
   if settings.USE_CURL != 1:
     return []
@@ -21,7 +26,9 @@ def get(ports, settings, shared):
       is_tarbz2=True,
       sha512hash=HASH)
 
-  libname = ports.get_lib_name('libcurl')
+  # Share the same name in this function and create() functor,
+  # which may be called later.
+  libname = get_libname(ports)
 
   def create():
     logging.info('building port: cURL')
@@ -190,14 +197,16 @@ def get(ports, settings, shared):
                  '-o', o_file,
                  '-DHAVE_CONFIG_H',
                  '-DBUILDING_LIBCURL',
+                 '-DNDEBUG',
+                 '-DCURL_STATICLIB',
                  '-I' + ports.get_include_dir(),
                  '-I' + os.path.join(dest_path, 'lib'),
                  '-I' + os.path.join(source_path),
                  '-I' + os.path.join(source_path, 'lib'),
                  '-I' + os.path.join(source_path, 'include'),
-                 '-O2', '-w']
-      if settings.USE_PTHREADS:
-        command += ['-s', 'USE_PTHREADS']
+                 '-fvisibility=hidden',
+                 '-Qunused-arguments',
+                 '-Os', '-w']
       commands.append(command)
       o_s.append(o_file)
     ports.run_commands(commands)
@@ -211,7 +220,7 @@ def get(ports, settings, shared):
 
 
 def clear(ports, shared):
-  shared.Cache.erase_file(ports.get_lib_name('libcurl'))
+  shared.Cache.erase_file(get_libname(ports))
 
 
 def process_dependencies(settings):
@@ -232,6 +241,7 @@ def show():
 
 
 curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
+/* Customized by Samsung manually */
 
 /* when building libcurl itself */
 /* #undef BUILDING_LIBCURL */
@@ -251,20 +261,24 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* to disable cryptographic authentication */
 /* #undef CURL_DISABLE_CRYPTO_AUTH */
 
+/* Disabled by Samsung */
 /* to disable DICT */
-/* #undef CURL_DISABLE_DICT */
+#define CURL_DISABLE_DICT 1
 
 /* to disable FILE */
 /* #undef CURL_DISABLE_FILE */
 
+/* Disabled by Samsung */
 /* to disable FTP */
-/* #undef CURL_DISABLE_FTP */
+#define CURL_DISABLE_FTP 1
 
+/* Disabled by Samsung */
 /* to disable GOPHER */
-/* #undef CURL_DISABLE_GOPHER */
+#define CURL_DISABLE_GOPHER 1
 
+/* Disabled by Samsung */
 /* to disable IMAP */
-/* #undef CURL_DISABLE_IMAP */
+#define CURL_DISABLE_IMAP 1
 
 /* to disable HTTP */
 /* #undef CURL_DISABLE_HTTP */
@@ -275,8 +289,9 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* to disable LDAPS */
 #define CURL_DISABLE_LDAPS 1
 
+/* Disabled by Samsung */
 /* to disable POP3 */
-/* #undef CURL_DISABLE_POP3 */
+#define CURL_DISABLE_POP3 1
 
 /* to disable proxies */
 /* #undef CURL_DISABLE_PROXY */
@@ -284,14 +299,17 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* to disable RTSP */
 /* #undef CURL_DISABLE_RTSP */
 
+/* Disabled by Samsung */
 /* to disable SMB */
-/* #undef CURL_DISABLE_SMB */
+#define CURL_DISABLE_SMB 1
 
+/* Disabled by Samsung */
 /* to disable SMTP */
-/* #undef CURL_DISABLE_SMTP */
+#define CURL_DISABLE_SMTP 1
 
+/* Disabled by Samsung */
 /* to disable TELNET */
-/* #undef CURL_DISABLE_TELNET */
+#define CURL_DISABLE_TELNET 1
 
 /* to disable TFTP */
 /* #undef CURL_DISABLE_TFTP */
@@ -1202,8 +1220,9 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* to enable NGHTTP2  */
 /* #undef USE_NGHTTP2 */
 
+/* Disabled by Samsung */
 /* if Unix domain sockets are enabled  */
-#define USE_UNIX_SOCKETS
+/* #define USE_UNIX_SOCKETS */
 
 /* Define to 1 if you are building a Windows target with large file support. */
 /* #undef USE_WIN32_LARGE_FILES */

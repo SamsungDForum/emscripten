@@ -395,8 +395,8 @@ const LibraryTizenEmss = {
             return Result.WRONG_HANDLE;
           }
           const listeners = namespace.listenerMap[handle];
-          listeners.forEach((eventHandler, eventName) => {
-            obj.removeEventListener(eventName, eventHandler);
+          Object.entries(listeners).forEach((eventArr) => {
+              obj.removeEventListener(eventArr[0], eventArr[1]);
           });
           namespace.listenerMap[handle] = {};
           return Result.SUCCESS;
@@ -518,40 +518,37 @@ const LibraryTizenEmss = {
       }
       return ret;
     },
-    _setupMediaKey: async function(config) {
-      let mediaKeys = null;
-      try {
-        mediaKeys = await EmssMediaKey._getMediaKeys(config);
-      } catch {
-        throw new Error("InvalidConfigurationError");
-      }
-
+    _initSession: function(config, mediaKeys) {
       const session = mediaKeys.createSession();
       const licenseUpdated = new Promise((resolve, reject) => {
         session.onmessage = (event) => {
-          EmssMediaKey._onSessionMessage(
+          this._onSessionMessage(
             event, config.licenseServer, resolve, reject);
         };
       });
-      await session.generateRequest(config.encryptionMode, config.initData);
-      try {
-        await licenseUpdated;
-      } catch {
-        throw new Error("SessionNotUpdatedError");
-      }
-      return [mediaKeys, session];
+
+      return session.generateRequest(config.encryptionMode, config.initData)
+        .then(() => { return licenseUpdated; })
+        .then(() => { return [mediaKeys, session]; },
+              () => { throw  new Error("SessionNotUpdatedError"); });
     },
-    _getMediaKeys: async function(config) {
+    _setupMediaKey: function(config) {
+      return this._getMediaKeys(config)
+        .then((mediaKeys) => { return this._initSession(config, mediaKeys); },
+              () => { throw new Error("InvalidConfigurationError"); });
+    },
+    _getMediaKeys: function(config) {
       const keySystem = {
         playready: 'com.microsoft.playready',
         widevine: 'com.widevine.alpha',
       }[config.cdm];
 
-      const mediaKeySystemAccess = await navigator.requestMediaKeySystemAccess(
+      return navigator.requestMediaKeySystemAccess(
           keySystem,
-          [EmssMediaKey._prepareSupportedConfiguration(config)]);
-
-      return await mediaKeySystemAccess.createMediaKeys();
+          [this._prepareSupportedConfiguration(config)])
+        .then(mediaKeySystemAccess => {
+            return mediaKeySystemAccess.createMediaKeys();
+        });
     },
     _prepareSupportedConfiguration: function(config) {
       const supportedConfigurations = {
@@ -581,28 +578,26 @@ const LibraryTizenEmss = {
       xmlhttp.responseType = 'arraybuffer';
       xmlhttp.setRequestHeader('Content-Type', 'text/xml; charset=utf-8');
       xmlhttp.onreadystatechange = () => {
-        EmssMediaKey._onReadyStateChange(
+        this._onReadyStateChange(
           xmlhttp, event, resolve, reject);
       };
       xmlhttp.send(event.message);
     },
-    _onReadyStateChange: async function(xmlhttp, event, resolve, reject) {
+    _onReadyStateChange: function(xmlhttp, event, resolve, reject) {
       if (xmlhttp.readyState != 4) {
-        return;
+        return Promise.resolve().then(() => undefined);
       }
 
       const responseString = String.fromCharCode(
           ...new Uint8Array(xmlhttp.response)).split('\r\n').pop();
       const license = new Uint8Array(
           Array.from(responseString).map((c) => c.charCodeAt(0)));
-      try {
-        await event.target.update(license);
-      } catch (error) {
-        console.error(`Failed to update the session: ${error}`);
-        reject(error);
-      } finally {
-        resolve();
-      }
+      return event.target.update(license)
+        .then(() => { resolve(); },
+              (error) => {
+            console.error(`Failed to update the session: ${error}`);
+            reject(error);
+        });
     },
   },
 
@@ -616,7 +611,7 @@ const LibraryTizenEmss = {
     let config = {};
     try {
       config = EmssMediaKey._makeDRMConfigFromPtr(configPtr);
-    } catch {
+    } catch (e) {
       return EmssCommon.Result.INVALID_ARGUMENT;
     }
     EmssMediaKey._setupMediaKey(config).then(

@@ -571,6 +571,18 @@ function emitDCEGraph(ast) {
     }
   }
 
+  function getNameForMemberExpression(value) {
+    if (value.type === 'Identifier') {
+      return value.name;
+    }
+
+    assert(value.type === 'MemberExpression');
+    assert(value.object);
+    assert(value.property);
+    return getNameForMemberExpression(value.object) + '.' +
+        getNameForMemberExpression(value.property);
+  }
+
   fullWalk(ast, function(node) {
     if (isAsmLibraryArgAssign(node)) {
       var assignedObject = getAsmLibraryArgValue(node);
@@ -583,6 +595,12 @@ function emitDCEGraph(ast) {
           // We may have something like  wasmMemory || Module.wasmMemory  in pthreads code;
           // use the left hand identifier.
           value = value.left;
+        }
+        if (value.type === 'MemberExpression') {
+          value = {
+              type: 'Identifier',
+              name: getNameForMemberExpression(value)
+          };
         }
         assert(value.type === 'Identifier');
         imports.push(value.name); // the name doesn't matter, only the value which is that actual thing we are importing

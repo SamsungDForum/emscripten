@@ -11,8 +11,8 @@ TAG = '7.68.0'
 HASH = 'ad7390fd700cb74db356a39e842dab011823b87d4047687f2a8c2e0f2920a4f8c6c193ba56391489a75939cc5c39a4dccec4e4ceeac516eb7394f03e0fb7aeae'
 
 
-def get_libname(ports):
-  return ports.get_lib_name('libcurl')
+def get_libname(ports, use_pthreads):
+  return ports.get_lib_name('libcurl' + ('-mt' if use_pthreads else ''))
 
 
 def get(ports, settings, shared):
@@ -28,7 +28,7 @@ def get(ports, settings, shared):
 
   # Share the same name in this function and create() functor,
   # which may be called later.
-  libname = get_libname(ports)
+  libname = get_libname(ports, settings.USE_PTHREADS)
 
   def create():
     logging.info('building port: cURL')
@@ -207,6 +207,8 @@ def get(ports, settings, shared):
                  '-fvisibility=hidden',
                  '-Qunused-arguments',
                  '-Os', '-w']
+      if settings.USE_PTHREADS:
+        command += ['-s', 'USE_PTHREADS']
       commands.append(command)
       o_s.append(o_file)
     ports.run_commands(commands)
@@ -220,7 +222,8 @@ def get(ports, settings, shared):
 
 
 def clear(ports, shared):
-  shared.Cache.erase_file(get_libname(ports))
+  shared.Cache.erase_file(get_libname(ports, False))
+  shared.Cache.erase_file(get_libname(ports, True))
 
 
 def process_dependencies(settings):

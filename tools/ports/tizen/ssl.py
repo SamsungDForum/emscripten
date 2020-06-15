@@ -11,8 +11,8 @@ TAG = '1.1.1d'
 HASH = '2bc9f528c27fe644308eb7603c992bac8740e9f0c3601a130af30c9ffebbf7e0f5c28b76a00bbb478bad40fbe89b4223a58d604001e1713da71ff4b7fe6a08a7'
 
 
-def get_libname(ports):
-  return ports.get_lib_name('libssl')
+def get_libname(ports, use_pthreads):
+  return ports.get_lib_name('libssl' + ('-mt' if use_pthreads else ''))
 
 
 def get(ports, settings, shared):
@@ -26,7 +26,7 @@ def get(ports, settings, shared):
       'openssl-' + TAG,
       sha512hash=HASH)
 
-  libname = get_libname(ports)
+  libname = get_libname(ports, settings.USE_PTHREADS)
 
   def create():
     logging.info('building port: OpenSSL {}'.format(libname))
@@ -97,6 +97,8 @@ def get(ports, settings, shared):
                  '-I' + os.path.join(source_path),
                  '-I' + os.path.join(source_path, 'include'),
                  '-Os', '-w']
+      if settings.USE_PTHREADS:
+        command += ['-s', 'USE_PTHREADS']
       commands.append(command)
       o_s.append(o_file)
     ports.run_commands(commands)
@@ -110,7 +112,8 @@ def get(ports, settings, shared):
 
 
 def clear(ports, shared):
-  shared.Cache.erase_file(get_libname(ports))
+  shared.Cache.erase_file(get_libname(ports, False))
+  shared.Cache.erase_file(get_libname(ports, True))
 
 
 def process_dependencies(settings):

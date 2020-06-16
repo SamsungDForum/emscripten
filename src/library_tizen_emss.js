@@ -1414,15 +1414,6 @@ const LibraryTizenEmss = {
         UNKNOWN_ERROR: 6,
       });
 
-      // JS -> C++ conversion maps
-      const ERROR_TO_ASYNC_RESULT = new Map([
-        ['Player was already destroyed.',                           AsyncResult.ALREADY_DESTROYED_ERROR            ],
-        ['WebGL rendering context not registered.',                 AsyncResult.WEBGL_CONTEXT_NOT_REGISTERED_ERROR ],
-        ['Player was already destroyed.',                           AsyncResult.ALREADY_DESTROYED_ERROR            ],
-        ['Invalid video texture provided.',                         AsyncResult.INVALID_DATA_ERROR                 ],
-        ['This functionality is available only for video tracks.',  AsyncResult.NOT_SUPPORTED_ERROR                ],
-      ]);
-
       WasmElementaryMediaTrack = {
         handleMap: [],
         listenerMap: {},
@@ -1448,8 +1439,19 @@ const LibraryTizenEmss = {
             if (error == null) {
               return AsyncResult.SUCCESS;
             }
-            if (ERROR_TO_ASYNC_RESULT.has(error.message)) {
-              return ERROR_TO_ASYNC_RESULT.get(error.message);
+            if (error instanceof DOMException) {
+              switch (error.name) {
+                case 'InvalidStateError':
+                  return AsyncResult.ALREADY_DESTROYED_ERROR;
+                case 'ConstraintError':
+                  return AsyncResult.WEBGL_CONTEXT_NOT_REGISTERED_ERROR;
+                case 'DataError':
+                  return AsyncResult.INVALID_DATA_ERROR;
+                case 'InvalidNodeTypeError':
+                  return AsyncResult.NOT_SUPPORTED_ERROR;
+                default:
+                  return AsyncResult.UNKNOWN_ERROR;
+              }
             }
             return AsyncResult.UNKNOWN_ERROR;
           },
@@ -1478,6 +1480,21 @@ const LibraryTizenEmss = {
           return EmssCommon._unsetListener(
             WasmElementaryMediaTrack, handle, eventName);
         },
+        _videoDecoderExceptionToErrorCode(ex) {
+          if (ex instanceof DOMException) {
+            switch (ex.name) {
+              case 'DataError':
+                return EmssCommon.Result.INVALID_ARGUMENT;
+              case 'InvalidNodeTypeError':
+                return EmssCommon.Result.WRONG_HANDLE;
+              case 'NotSupportedError':
+                return EmssCommon.Result.NOT_SUPPORTED;
+              default:
+                return EmssCommon.Result.FAILED;
+            }
+          }
+          return EmssCommon.Result.FAILED;
+        }
       };
     },
   },
@@ -1544,13 +1561,17 @@ const LibraryTizenEmss = {
     }
   },
 
-  elementaryMediaTrackFillTextureWithNextFrame__deps: ['$GL'],
+  elementaryMediaTrackFillTextureWithNextFrame__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackFillTextureWithNextFrame__proxy: 'sync',
   elementaryMediaTrackFillTextureWithNextFrame: function(
       handle, textureId, onFinished, userData) {
     const webGLTexture = GL.textures[textureId];
-    return WasmElementaryMediaTrack._callAsyncFunction(
-      handle, onFinished, userData, 'getPicture', webGLTexture);
+    try {
+      return WasmElementaryMediaTrack._callAsyncFunction(
+        handle, onFinished, userData, 'getPicture', webGLTexture);
+    } catch (ex) {
+      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    }
   },
 
   elementaryMediaTrackGetSessionId__deps: ['$WasmElementaryMediaTrack'],
@@ -1567,7 +1588,7 @@ const LibraryTizenEmss = {
       handle, 'isOpen', retPtr, 'i8');
   },
 
-  elementaryMediaTrackRecycleTexture__deps: ['$GL'],
+  elementaryMediaTrackRecycleTexture__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackRecycleTexture__proxy: 'sync',
   elementaryMediaTrackRecycleTexture: function(handle, textureId) {
     const webGLTexture = GL.textures[textureId];
@@ -1576,16 +1597,24 @@ const LibraryTizenEmss = {
       "textureTarget": 0x8D65  // GL_TEXTURE_EXTERNAL_OES
     };
 
-    return WasmElementaryMediaTrack._callFunction(
-      handle, 'recyclePicture', videoPicture);
+    try {
+      return WasmElementaryMediaTrack._callFunction(
+        handle, 'recyclePicture', videoPicture);
+    } catch (ex) {
+      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    }
   },
 
-  elementaryMediaTrackRegisterCurrentGraphicsContext__deps: ['$GL'],
+  elementaryMediaTrackRegisterCurrentGraphicsContext__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackRegisterCurrentGraphicsContext__proxy: 'sync',
   elementaryMediaTrackRegisterCurrentGraphicsContext: function(handle) {
     const webGLContext = GL.currentContext.GLctx;
-    return WasmElementaryMediaTrack._callFunction(
-      handle, 'setWebGLRenderingContext', webGLContext);
+    try {
+      return WasmElementaryMediaTrack._callFunction(
+        handle, 'setWebGLRenderingContext', webGLContext);
+    } catch (ex) {
+      return WasmElementaryMediaTrack._videoDecoderExceptionToErrorCode(ex);
+    }
   },
 
   elementaryMediaTrackSetMediaKey__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],

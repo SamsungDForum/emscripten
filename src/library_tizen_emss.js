@@ -1200,9 +1200,9 @@ const LibraryTizenEmss = {
       console.error(`No such elementary media stream source: '${handle}'`);
       return EmssCommon.Result.WRONG_HANDLE;
     }
-    if (WasmElementaryMediaStreamSource.handleMap[handle].hasOwnProperty(
-        'destroy')) {
-      WasmElementaryMediaStreamSource.handleMap[handle].destroy();
+    const source = WasmElementaryMediaStreamSource.handleMap[handle];
+    if (typeof source.destroy == 'function') {
+      source.destroy();
     }
     EmssCommon._clearListeners(WasmElementaryMediaStreamSource, handle);
     delete WasmElementaryMediaStreamSource.handleMap[handle];

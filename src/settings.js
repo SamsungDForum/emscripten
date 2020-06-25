@@ -1525,7 +1525,7 @@ var SINGLE_FILE = 0;
 var EMIT_EMSCRIPTEN_METADATA = 0;
 
 // If set to 1, toolchain will use custom Tizen WebAPIs
-var ENVIRONMENT_MAY_BE_TIZEN = 0;
+var ENVIRONMENT_MAY_BE_TIZEN = 1;
 
 // If set to 1, all JS libraries will be automaticially available at link time.
 // This gets set to 0 in STRICT mode (or with MINIMAL_RUNTIME) which mean you

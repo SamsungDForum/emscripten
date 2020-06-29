@@ -13,12 +13,12 @@
 namespace samsung {
 namespace wasm {
 
-/// Helper type to carry both an error code and return value.
+/// Helper type which carries both an error code and return value of an
+/// operation.
 template <class T>
 struct Result {
-  /// Return value of an operation, only valid if
-  /// <code>operation_result == OperationResult::kSuccess</code>.
-  /// Defined if <code>T</code> is not <code>void</code>
+  /// A value returned by an operation, valid only if `operation_result` is
+  /// equal to `OperationResult::kSuccess`. Defined if `T` is not `void`.
   T value;
 
   /// Operation result.
@@ -27,15 +27,13 @@ struct Result {
   /// Checks if the operation ended with success.
   explicit operator bool() const noexcept;
 
-  /// Returns <code>Result::value</code>.
-  /// Defined if <code>T</code> is not <code>void</code>
+  /// Returns `Result<T>::value`. Defined if `T` is not `void`.
   T& operator*();
 
   /// @copydoc Result::operator*()
   const T& operator*() const;
 
-  /// Accesses <code>Result::value</code>.
-  /// Defined if <code>T</code> is not <code>void</code>
+  /// Accesses `Result<T>::value`. Defined if `T` is not `void`.
   T* operator->();
 
   /// @copydoc Result::operator->()

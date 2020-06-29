@@ -15,7 +15,7 @@
 namespace samsung {
 namespace wasm {
 
-/// Enum representing supported audio formats.
+/// Lists audio sampling formats recognized by WASM Player.
 enum class SampleFormat {
   kUnknown,    ///< Unknown sample format.
   kU8,         ///< Unsigned 8-bit w/ bias of 128.
@@ -30,7 +30,7 @@ enum class SampleFormat {
   kEac3,       ///< Compressed E-AC3 bitstream.
 };
 
-/// Lists representations of ordering of audio channels.
+/// Lists audio channel layouts recognized by WASM Player.
 enum class ChannelLayout {
   kNone,           ///< Channel Layout is unspecified.
   kUnsupported,    ///< Channel Layout is unsupported.
@@ -65,7 +65,7 @@ enum class ChannelLayout {
   kSurround,       ///< Front L + R + C.
 };
 
-/// Contains audio <code>ElementaryMediaTrack</code> config.
+/// Contains audio `ElementaryMediaTrack` config.
 struct ElementaryAudioTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryAudioTrackConfig() : ElementaryMediaTrackConfig() {}
 

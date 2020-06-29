@@ -15,7 +15,7 @@
 namespace samsung {
 namespace wasm {
 
-/// Contains video <code>ElementaryMediaTrack</code> config.
+/// Contains video `ElementaryMediaTrack` config.
 struct ElementaryVideoTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryVideoTrackConfig() : ElementaryMediaTrackConfig() {}
 
@@ -32,23 +32,23 @@ struct ElementaryVideoTrackConfig final : ElementaryMediaTrackConfig {
         framerate_den(framerate_den) {}
 
   /// Initial width of video in pixels. Changing video width during playback
-  /// is possible by changing <code>ElementaryMediaPacket::width</code>.
+  /// is possible by changing `ElementaryMediaPacket::width`.
   uint32_t width;
 
   /// Initial height of video in pixels. Changing video height during playback
-  /// is possible by changing <code>ElementaryMediaPacket::height</code>.
+  /// is possible by changing `ElementaryMediaPacket::height`.
   uint32_t height;
 
   /// Initial framerate numerator, must be non-negative.
   /// Changing video framerate during playback is possible by changing
-  /// <code>ElementaryMediaPacket::framerate_num</code> and
-  /// <code>ElementaryMediaPacket::framerate_den</code>.
+  /// `ElementaryMediaPacket::framerate_num` and
+  /// `ElementaryMediaPacket::framerate_den`.
   uint32_t framerate_num;
 
   /// Framerate denominator, must be positive.
   /// Changing video framerate during playback is possible by changing
-  /// <code>ElementaryMediaPacket::framerate_num</code> and
-  /// <code>ElementaryMediaPacket::framerate_den</code>.
+  /// `ElementaryMediaPacket::framerate_num` and
+  /// `ElementaryMediaPacket::framerate_den`.
   uint32_t framerate_den;
 };
 

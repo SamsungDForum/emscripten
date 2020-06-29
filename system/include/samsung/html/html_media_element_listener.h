@@ -12,13 +12,13 @@ namespace samsung {
 namespace html {
 
 /// @brief
-/// Allows receiving <code>HTMLMediaElement</code> events.
+/// Allows receiving `HTMLMediaElement` events.
 ///
-/// An interface to receive updates of <code>HTMLMediaElement</code>. Object
-/// implementing this interface needs to be bound to
-/// <code>HTMLMediaElement::SetListener</code> method.
+
+/// `HTMLMediaElement` events are delivered via this interface when a listener
+/// is registered by `HTMLMediaElement::SetListener()`.
 ///
-/// @sa HTMLMediaElement
+/// @sa `HTMLMediaElement`
 class HTMLMediaElementListener {
  public:
   virtual ~HTMLMediaElementListener() = default;
@@ -37,9 +37,8 @@ class HTMLMediaElementListener {
   virtual void OnWaiting() {}
 
   /// @remarks
-  /// An ownership of <code>error_msg</code> is not transferred and is valid
-  /// only for the duration of the <code>OnError()</code> call.
-  /// Do not remove this string manually!
+  /// An ownership of `error_msg` is not transferred and is valid only for the
+  /// duration of the `OnError()` call. Do not remove this string manually!
   virtual void OnError(MediaError, const char* /*error_msg*/) {}
 };
 

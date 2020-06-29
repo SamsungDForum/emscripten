@@ -21,17 +21,17 @@ struct EncryptedSubsampleDescription {
   uint32_t cipher_block;
 };
 
-/// Type representing a single <b>encrypted</b> packet (video or audio).
+/// Type representing a single *encrypted* packet (either video or audio).
 struct EncryptedElementaryMediaPacket : public ElementaryMediaPacket {
   /// Array of descriptions of subsamples of which given packet consists of.
   ///
-  /// @sa EncryptedSubsampleDescription
+  /// @sa `EncryptedSubsampleDescription`
   std::vector<EncryptedSubsampleDescription> subsamples;
 
-  /// ID of the key needed to decrypt given packet.
+  /// ID of the key (KID) needed to decrypt the packet.
   std::vector<uint8_t> key_id;
 
-  /// Initialization Vector (IV) needed to decrypt given packet.
+  /// Initialization Vector (IV) needed to decrypt the packet.
   std::vector<uint8_t> initialization_vector;
 
   /// Type of initialization data used for encryption.

@@ -18,11 +18,10 @@ namespace wasm {
 /// @brief
 /// Allows receiving <code>ElementaryMediaTrack</code> events.
 ///
-/// An interface to receive updates of <code>ElementaryMediaTrack</code>.
-/// Object implementing this interface needs to be bound to
-/// <code>ElementaryMediaTrack::SetListener</code> method.
+/// `ElementaryMediaTrack` events are delivered via this interface when a
+/// listener is registered by `ElementaryMediaTrack::SetListener()`.
 ///
-/// @sa ElementaryMediaTrack
+/// @sa `ElementaryMediaTrack`
 class ElementaryMediaTrackListener {
  public:
   virtual ~ElementaryMediaTrackListener() = default;
@@ -30,41 +29,45 @@ class ElementaryMediaTrackListener {
   /// Fired when the track is ready to accept data.
   virtual void OnTrackOpen() {}
 
-  /// Fired when associated source enters state that makes this track unable of
-  /// accepting data. A reason for closing the track is passed as an argument.
+  /// Fired when an associated source enters a state that makes this track
+  /// unable of accepting data. A reason for closing the track is passed as an
+  /// argument.
   ///
-  /// @param[in] close_reason The reason for closing this track.
+  /// @param[in] close_reason A reason for closing this track.
   virtual void OnTrackClosed(ElementaryMediaTrack::CloseReason) {}
 
-  /// Fired to indicate <code>currentTime</code> attribute of the associated
-  /// <code>html::HTMLMediaElement</code> was changed. New playback time is
-  /// delivered as an argument to the function.
-  /// <br>
+  /// Fired when an associated `html::HTMLMediaElement` is seeking. This is a
+  /// result of either a call to `html::HTMLMediaElement::SetCurrentTime()` or
+  /// direct user interaction with `HTMLMediaElement` with controls enabled. New
+  /// playback time is delivered as an argument to this function.
+  ///
   /// Seek sequence:
   /// -# If track is open:
-  ///    <code>ElementaryMediaTrackListener::OnTrackClosed</code> with reason
-  ///    argument set to
-  ///    <code>ElementaryMediaTrack::CloseReason::kTrackSeeking</code>.
-  /// -# <code>ElementaryMediaTrackListener::OnSeek</code> with argument set to
-  ///    a new playback time (this may fire multiple times if multiple seek
-  ///    operations were performed in a close succession),
-  /// -# <code>ElementaryMediaTrackListener::OnSessionIdChanged</code>
-  ///    indicating start of a new session. Packets with the old session are
-  ///    dropped in the backend. This event may also fire multiple times.
+  ///    `ElementaryMediaTrackListener::OnTrackClosed()` is fired with a reason
+  ///    argument set to `ElementaryMediaTrack::CloseReason::kTrackSeeking`.
+  /// -# `ElementaryMediaTrackListener::OnSessionIdChanged()` is fired
+  ///    indicating the beginning of a new session. Packets with the old
+  ///    `SessionId` are dropped by the backend. This may fire multiple times if
+  ///    multiple seek operations were performed in a close succession
+  /// -# `ElementaryMediaTrackListener::OnSeek()` is fired with an argument set
+  ///    to a new playback time. This event may fire multiple times if multiple
+  ///    seek operations were performed in a close succession.
   /// -# If track was open prior seek operation:
-  ///    <code>ElementaryMediaTrackListener::OnTrackOpen</code>.
+  ///    `ElementaryMediaTrackListener::OnTrackOpen()` is fired.
   ///
-  /// If associated <code>ElementaryMediaStreamSource</code> is in
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpen</code> state when
-  /// seeking occurs, it will change it's state to
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpenPending</code> when
-  /// above sequence is performed.
-  /// <br>
-  /// Please note this event will fire at other time than
-  /// <code>html::HTMLMediaElement</code>'s seeking and seeked events and should
-  /// be prioritized.
+  /// If an associated `ElementaryMediaStreamSource` is in the
+  /// `ElementaryMediaStreamSource::ReadyState::kOpen` state when seeking
+  /// occurs, it will change it's state to
+  /// `ElementaryMediaStreamSource::ReadyState::kOpenPending` for the duration
+  /// of the sequence above.
   ///
-  /// @param[in] new_time Time to which the seek is being performed.
+  /// Please note this event doesn't fire at the same time that
+  /// `html::HTMLMediaElement`'s `seeking` and `seeked` events. A source of
+  /// media data should use this event to seek to the new playback position.
+  ///
+  /// @param[in] new_time A time to which the seek is being performed.
+  ///
+  /// @sa `SessionId`
   virtual void OnSeek(Seconds /*new_time*/) {}
 
   /// Fired when id of the current session is changed, which happens when track
@@ -72,21 +75,21 @@ class ElementaryMediaTrackListener {
   ///
   /// @remarks
   /// This event allows application to efficiently track sessions (as opposed
-  /// to @ref ElementaryMediaTrack::GetSessionId(), which should be used only
-  /// to obtain an initial value of <code>session_id</code>).
+  /// to `ElementaryMediaTrack::GetSessionId()`, which should be used only
+  /// to obtain an initial value of `session_id`).
   ///
   /// @param[in] session_id Id of new session.
   ///
-  /// @sa SessionId
-  /// @sa ElementaryMediaPacket::session_id
-  /// @sa ElementaryMediaTrackListener::OnSeek
+  /// @sa `SessionId`
+  /// @sa `ElementaryMediaPacket::session_id`
+  /// @sa `ElementaryMediaTrackListener::OnSeek()`
   virtual void OnSessionIdChanged(SessionId /*session_id*/) {}
 
-  /// Fired when one of async append methods fails:
-  /// @sa ElementaryMediaTrack::AppendPacketAsync()
-  /// @sa ElementaryMediaTrack::AppendEncryptedPacketAsync()
-  /// @sa ElementaryMediaTrack::AppendEndOfTrackAsync()
-  /// Error Code is passed as an argument.
+  /// Fired when one of async append methods fail:
+  /// * `ElementaryMediaTrack::AppendPacketAsync()`
+  /// * `ElementaryMediaTrack::AppendEncryptedPacketAsync()`
+  /// * `ElementaryMediaTrack::AppendEndOfTrackAsync()`
+  /// A code identifying an error is passed as an argument.
   ///
   /// @param[in] operation_result Error code representing append error.
   virtual void OnAppendError(OperationResult /*operation_result*/) {}

@@ -9,8 +9,9 @@
 namespace samsung {
 namespace html {
 
-/// Enumerates possible errors while handling media
-/// in an HTML media element
+/// Enumerates errors possible while handling media using `HTMLMediaElement`.
+///
+/// @sa `HTMLMediaElementListener::OnError()`
 enum class MediaError {
   kMediaErrAborted = 1,
   kMediaErrNetwork,

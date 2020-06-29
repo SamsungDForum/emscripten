@@ -9,21 +9,29 @@
 namespace samsung {
 namespace wasm {
 
-/// Contains information about EMSS features available on the current device.
+/// Contains information about `ElementaryMediaStreamSource` features available
+/// on the current device.
 struct EmssVersionInfo {
-  /// Base EMSS version.
+  /// Base `ElementaryMediaStreamSource` version.
   ///
   /// @remark
-  /// Documentation of non-base version features include remarks on <code>
-  /// EmssVersionInfo</code> entries indicating their availability.
+  /// Documentation of non-base version features include remarks on
+  /// `EmssVersionInfo` entries indicating their availability.
   bool has_emss;
 
-  /// Legacy EMSS version indicate an early EMSS version.
+  /// An early `ElementaryMediaStreamSource` version.
+  ///
+  /// @remark
+  /// If this is `true` some limitations apply. For details, please see
+  /// [a note on compatibility on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/usage-guide.html#note-on-compatibility).
   bool has_legacy_emss;
 
+  /// `ElementaryMediaStreamSource::Mode::kVideoTexture` is supported on this
+  /// device.
   bool has_video_texture;
 
-  /// Queries platform to get EMSS features available on the current device.
+  /// Queries platform to get `ElementaryMediaStreamSource` features available
+  /// on the current device.
   static EmssVersionInfo Create();
 };
 

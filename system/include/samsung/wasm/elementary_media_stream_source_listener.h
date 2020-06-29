@@ -12,45 +12,39 @@ namespace samsung {
 namespace wasm {
 
 /// @brief
-/// Allows receiving <code>ElementaryMediaStreamSource</code> events.
+/// Allows receiving `ElementaryMediaStreamSource` events.
 ///
-/// An interface to receive updates of <code>ElementaryMediaStreamSource</code>.
-/// Object implementing this interface needs to be bound to
-/// <code>ElementaryMediaStreamSource::SetListener</code> method.
+/// `ElementaryMediaStreamSource` events are delivered via this interface when
+/// a listener is registered by `ElementaryMediaStreamSource::SetListener()`.
 ///
-/// @sa ElementaryMediaStreamSource
+/// @sa `ElementaryMediaStreamSource`
 class ElementaryMediaStreamSourceListener {
  public:
   virtual ~ElementaryMediaStreamSourceListener() = default;
 
-  /// Called when associated EMSS object enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kDetached</code> state.
+  /// Called when an associated source object enters the
+  /// `ElementaryMediaStreamSource::ReadyState::kDetached` state.
   virtual void OnSourceDetached() {}
 
-  /// Called when associated EMSS object enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kClosed</code> state.
+  /// Called when an associated source object enters the
+  /// `ElementaryMediaStreamSource::ReadyState::kClosed` state.
   virtual void OnSourceClosed() {}
 
-  /// Called when associated EMSS object enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpenPending</code> state.
+  /// Called when an associated source object enters the
+  /// `ElementaryMediaStreamSource::ReadyState::kOpenPending` state.
   virtual void OnSourceOpenPending() {}
 
-  /// Called when associated EMSS object enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpen</code> state.
+  /// Called when an associated source object enters the
+  /// `ElementaryMediaStreamSource::ReadyState::kOpen` state.
   virtual void OnSourceOpen() {}
 
-  /// Called when associated EMSS object enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kEnded</code> state.
+  /// Called when an associated source object enters the
+  /// `ElementaryMediaStreamSource::ReadyState::kEnded` state.
   virtual void OnSourceEnded() {}
 
-  /// Called when current playback position changes. This is preferred method
-  /// of informing the app about playback position over
-  /// <code>html::HTMLMediaElementListener::OnTimeUpdate</code>.
-  ///
-  /// @remarks
-  /// If <code>EmssVersionInfo.has_legacy_emss</code> is <code>true</code> (API
-  /// version 0 is used), this event behaves the same way as the <code>
-  /// html::HTMLMediaElementListener::OnTimeUpdate()</code> event.
+  /// Called when current playback position changes. This is the preferred
+  /// method of receiving time updates and should be used instead of
+  /// `html::HTMLMediaElementListener::OnTimeUpdate()`.
   ///
   /// @param[in] new_time New playback position.
   virtual void OnPlaybackPositionChanged(Seconds /*new_time*/) {}

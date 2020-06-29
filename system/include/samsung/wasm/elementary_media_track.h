@@ -29,33 +29,33 @@ struct EncryptedElementaryMediaPacket;
 ///
 /// Each instance of this class represents a single elementary media track
 /// (either audio or video). The track object allows sending
-/// <code>ElementaryMediaPacket</code>s to platform for a playback.
-/// <br>
+/// `ElementaryMediaPacket`s to platform for a playback.
+///
 /// Valid track objects can only be obtained through a call to
-/// <code>ElementaryMediaStreamSource::AddTrack()</code>.
+/// `ElementaryMediaStreamSource::AddTrack()`.
 class ElementaryMediaTrack final {
  public:
   /// Enumerates track close reasons. Values of this enum are passed to
-  /// <code>ElementaryMediaTrackListener::OnTrackClosed</code> to inform about
+  /// `ElementaryMediaTrackListener::OnTrackClosed()` to inform about
   /// the reason of the close.
   enum class CloseReason {
-    /// <code>ElementaryMediaStreamSource</code> state chaned to
-    /// <code>ElementaryMediaStreamSource::ReadyState::kClosed</code>.
+    /// `ElementaryMediaStreamSource` state changed to
+    /// `ElementaryMediaStreamSource::ReadyState::kClosed`.
     kSourceClosed,
 
     /// Source was closed due to an error.
     kSourceError,
 
-    /// Source was detached from <code>html::HTMLMediaElement</code>.
+    /// Source was detached from `html::HTMLMediaElement`.
     kSourceDetached,
 
-    /// This <code>ElementaryMediaTrack</code> was disabled.
+    /// This `ElementaryMediaTrack` has been disabled.
     kTrackDisabled,
 
-    /// This <code>ElementaryMediaTrack</code> has ended.
+    /// This `ElementaryMediaTrack` has ended.
     kTrackEnded,
 
-    /// This <code>ElementaryMediaTrack</code> is seeking.
+    /// This `ElementaryMediaTrack` has started seeking.
     kTrackSeeking,
 
     /// Track has closed due to an unspecified error; generally, this shouldn't
@@ -63,10 +63,9 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
-  /// Default constructor, creates an <b>invalid</b>
-  /// <code>ElementaryMediaTrack</code> object, to be further replaced with
-  /// a proper one, received with a call to
-  /// <code>ElementaryMediaStreamSource::AddTrack()</code>.
+  /// Default constructor, creates an *invalid* `ElementaryMediaTrack` object.
+  /// It can be further replaced with a proper one, received with a call to
+  /// `ElementaryMediaStreamSource::AddTrack()`.
   ElementaryMediaTrack();
   ~ElementaryMediaTrack();
 
@@ -76,156 +75,176 @@ class ElementaryMediaTrack final {
   ElementaryMediaTrack(ElementaryMediaTrack&&);
   ElementaryMediaTrack& operator=(ElementaryMediaTrack&&);
 
-  /// Returns <code>true</code> if track instance is valid. If track is invalid
-  /// all method calls will fail.
+  /// Returns `true` if the track instance is valid. All methods calls on an
+  /// invalid track will fail.
   ///
-  /// @return <code>true</code> if track instance is valid, otherwise
-  /// <code>false</code>.
+  /// @return `true` if track instance is valid, otherwise `false`.
   bool IsValid() const;
 
-  /// Appends given <code>ElementaryMediaPacket</code> to the track.
-  ///
-  /// @param[in] packet Packet to append.
-  ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> on success,
-  /// otherwise a code describing the error.
+  /// Appends a given `ElementaryMediaPacket` to the track.
   ///
   /// @remarks
-  /// <code>AppendPacket()</code> and <code>AppendPacketAsync()</code> calls
-  /// for the same track can be mixed.
+  /// * `AppendPacket()` cannot be called on the main thread.
+  /// * `AppendPacket()` and `AppendPacketAsync()` calls for the same track can
+  ///    be mixed.
+  ///
+  /// @param[in] packet A packet to append.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success,  otherwise a code describing the
+  /// error.
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
 
-  /// Appends given <code>ElementaryMediaPacket</code> to the track
-  /// asynchronously.
+  /// Appends a given `ElementaryMediaPacket` to the track asynchronously.
   ///
-  /// For clear packets, <code>AppendPacketAsync()</code> is functionally
-  /// equivalent to <code>AppendPacket()</code> (i.e. it will validate
-  /// the packet and return result synchronously).
-  ///
-  /// @param[in] packet Packet to append.
-  ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> if packet validation
-  /// and append to track was successful, otherwise a code describing
-  /// the error.
+  /// For clear packets, `AppendPacketAsync()` is functionally equivalent to
+  /// `AppendPacket()` (i.e. it will validate the packet and return result
+  /// synchronously).
   ///
   /// @remarks
-  /// <code>AppendPacket()</code> and <code>AppendPacketAsync()</code> calls
-  /// for the same track can be mixed.
+  /// * `AppendPacketAsync()` can be called both on the main thread and on side
+  ///   threads.
+  /// * `AppendPacket()` and `AppendPacketAsync()` calls for the same track can
+  ///   be mixed.
+  ///
+  /// @param[in] packet A packet to append.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` if packet validation and append to track was
+  /// successful, otherwise a code describing the error.
   Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
 
-  /// Appends given <code>EncryptedElementaryMediaPacket</code> to the track.
-  ///
-  /// @param[in] packet Packet to append.
-  ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> on success,
-  /// otherwise a code describing the error.
+  /// Appends a given `EncryptedElementaryMediaPacket` to the track.
   ///
   /// @remarks
-  /// <code>AppendEncryptedPacketSync()</code> and
-  /// <code>AppendEncryptedPacketAsync()</code> calls for the same track
-  /// can be mixed.
+  /// * It is recommended to use `AppendEncryptedPacketAsync()` method to append
+  ///   encrypted packets over this method due to performance reasons
+  ///   (decrypting packets takes some time, doing it synchronously may decrease
+  ///   performance).
+  /// * `AppendEncryptedPacket()` cannot be called on the main thread.
+  /// * `AppendEncryptedPacket()` and `AppendEncryptedPacketAsync()` calls for
+  ///    the same track can be mixed.
   ///
-  /// @remarks
-  /// It is recommended to use <code>AppendEncryptedPacketAsync</code> method
-  /// to append encryped packets over this method due to performance reasons
-  /// (decrypting packets takes some time, doing it synchronously may decrease
-  /// performance).
+  /// @param[in] packet A packet to append.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
 
-  /// Appends given <code>EncryptedElementaryMediaPacket</code> to the track,
-  /// but decrypts it asynchronously.
+  /// Appends a given `EncryptedElementaryMediaPacket` to the track, but
+  /// decrypts it asynchronously.
   ///
-  /// <code>AppendEncryptedPacketAsync()</code> will validate the packet and
-  /// return result synchronously. However, packet decryption will be executed
-  /// asynchronously. If decryption error occurs, it will be signalled via
-  /// <code>ElementaryMediaTrackListener::OnAppendError()</code> event.
-  ///
-  /// @param[in] packet Packet to append.
-  ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> if packet validation
-  /// and append to track was successful, otherwise a code describing
-  /// the error.
+  /// `AppendEncryptedPacketAsync()` will validate the packet and return result
+  /// synchronously. However, packet decryption will be executed asynchronously.
+  /// If decryption error occurs, it will be signaled via
+  /// `ElementaryMediaTrackListener::OnAppendError()` event.
   ///
   /// @remarks
-  /// <code>AppendEncryptedPacketSync()</code> and
-  /// <code>AppendEncryptedPacketAsync()</code> calls for the same track
-  /// can be mixed.
+  /// * It is recommended to use this method to append encrypted packets over
+  ///   `AppendEncryptedPacket()` due to performance reasons (decrypting packets
+  ///   takes some time, doing it asynchronously will improve performance).
+  /// * `AppendEncryptedPacketAsync()` can be called both on the main thread and
+  ///   on side threads.
+  /// * `AppendEncryptedPacket()` and `AppendEncryptedPacketAsync()` calls for
+  ///   the same track can be mixed.
   ///
-  /// @remarks
-  /// It is recommended to use this method to append encryped packets over
-  /// <code>AppendEncryptedPacket</code> due to performance reasons
-  /// (decrypting packets takes some time, doing it asynchronously will improve
-  /// performance).
-  Result<void> AppendEncryptedPacketAsync(const EncryptedElementaryMediaPacket&);
+  /// @param[in] packet A packet to append.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` if packet validation and append to track was
+  /// successful, otherwise a code describing the error.
+  Result<void> AppendEncryptedPacketAsync(
+      const EncryptedElementaryMediaPacket&);
 
-  /// Appends special end-of-track packet to the source. Upon processing this
-  /// packet, the track will end. It is advised to end all tracks at a similar
-  /// time. Operation will end once track is properly closed or an error
-  /// occurs.
+  /// Appends a special end-of-track packet to the source.
+  ///
+  /// Upon processing this packet, the track will end. It is advised to end all
+  /// tracks at a similar time. Operation will end once end of track is queued
+  /// in Media Player's packet buffer.
+  ///
+  /// A track that has ended will close and therefore emit the
+  /// `ElementaryMediaTrackListener::OnTrackClosed()` event. When tracks
+  /// associated with `ElementaryMediaStreamSource` end, the source changes it's
+  /// state to `ElementaryMediaStreamSource::ReadyState::kEnded`.
+  ///
+  /// @remark
+  /// `AppendEndOfTrack()` cannot be called on the main thread.
   ///
   /// @param[in] session_id Id of the session the end of track packet should
   /// belong to.
   ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> on success, otherwise
-  /// a code describing the error.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   Result<void> AppendEndOfTrack(SessionId session_id);
 
-  /// Appends special end-of-track packet to the source asynchronously.
+  /// Appends a special end-of-track packet to the source asynchronously.
+  ///
   /// Upon processing this packet, the track will end. It is advised to end
   /// all tracks at a similar time.
   ///
-  /// <code>AppendEndOfTrack()</code> returns result synchronously when track
-  /// starts closing or an error occurs.
-  /// If <code>AppendEndOfTrack()</code> returns success synchronously but
-  /// in the meantime <code>SessionId</code> changes or seek operation starts,
-  /// track will not be closed and error informing that end of track append is
-  /// aborted will be signalled via
-  /// <code>ElementaryMediaTrackListener::OnAppendError()</code> event.
+  /// `AppendEndOfTrackAsync()` returns result synchronously when track starts
+  /// closing or an error occurs.
+  ///
+  /// If `AppendEndOfTrackAsync()` returns success synchronously but if in the
+  /// meantime `SessionId` changes or seek operation starts, track will not be
+  /// closed and an error informing that end of track append is aborted will be
+  /// signaled via `ElementaryMediaTrackListener::OnAppendError()` event.
+  ///
+  /// A track that has ended will close and therefore emit the
+  /// `ElementaryMediaTrackListener::OnTrackClosed()` event. When tracks
+  /// associated with `ElementaryMediaStreamSource` end, the source changes it's
+  /// state to `ElementaryMediaStreamSource::ReadyState::kEnded`.
+  ///
+  /// @remark
+  /// `AppendEndOfTrackAsync()` can be called both on the main thread and on
+  /// side threads.
   ///
   /// @param[in] session_id Id of the session the end of track packet should
   /// belong to.
   ///
-  /// @return <code>Result\<void\></code> with <code>operation_result</code>
-  /// field set to <code>OperationResult::kSuccess</code> on success, otherwise
-  /// a code describing the error.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   Result<void> AppendEndOfTrackAsync(SessionId session_id);
 
-  /// Fills provided texture with a decoded video frame.
-  /// Player will decode frames sent with
-  /// <code>ElementaryMediaTrack::AppendPacket</code>, but won't render them
-  /// when <code>ElementaryMediaStreamSource</code> is in
-  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode.
-  /// Instead, their contents can be accessed by calling this method
-  /// repeatedly.
+  /// Fills a provided texture with a decoded video frame.
+  ///
+  /// The texture should be rendered as soon as possible after it's received.
+  /// Player will resolve `finished_callback` when playback time reaches the
+  /// point when a frame associated with the texture should be displayed.
+  ///
+  /// Player will decode frames sent with `ElementaryMediaTrack::AppendPacket()`
+  /// but won't render them on `HTMLMediaElement` when
+  /// `ElementaryMediaStreamSource` is in the
+  /// `ElementaryMediaStreamSource::Mode::kVideoTexture` mode. Instead, their
+  /// contents can be accessed by calling this method repeatedly.
   ///
   /// @remarks
-  /// When <code>texture_id</code> is processed,
-  /// it must be freed with <code>ElementaryMediaTrack::RecycleTexture</code>.
+  /// * When `texture_id` is processed, it must be freed with
+  ///   `ElementaryMediaTrack::RecycleTexture()`.
+  /// * Sets the texture to the `GL_TEXTURE_EXTERNAL_OES` type.
+  /// * This mode is supported only on devices which have
+  ///   `EmssVersionInfo::has_video_texture` set to `true`.
   ///
-  /// @remarks
-  /// Sets texture to type <code>GL_TEXTURE_EXTERNAL_OES</code>.
+  /// @warning
+  /// * Can only be called in the
+  ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
+  ///   `ElementaryMediaStreamSource`.
+  /// * Valid only for video tracks.
   ///
   /// @param texture_id A texture that will be filled with video frame.
   ///
-  /// @param finished_callback A callback which will be called when
-  /// <code>texture_id</code> is ready and should be rendered by App.
+  /// @param finished_callback A callback which will be called when `texture_id`
+  /// is ready and should be rendered by App.
   ///
-  /// @warning Can only be called in the
-  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
-  /// <code>ElementaryMediaStreamSource</code>.
-  /// Valid only for video track.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code>
-  /// on success, otherwise a code describing the error.
-  ///
-  /// @sa <code>ElementaryMediaTrack::RecycleTexture</code>
+  /// @sa `ElementaryMediaTrack::RegisterCurrentGraphicsContext()`
+  /// @sa `ElementaryMediaTrack::RecycleTexture()`
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
@@ -234,100 +253,115 @@ class ElementaryMediaTrack final {
   ///
   /// @remarks
   /// This should be used sparingly, because calling this method can be slow.
-  /// It's recommended to obtain an initial value of <code>session_id</code>
-  /// using <code>GetSessionId()</code> and receive further updates with the
-  /// @sa ElementaryMediaTrackListener::OnSessionIdChanged() event.
+  /// It's recommended to obtain an initial value of `session_id` using
+  /// `GetSessionId()` and receive further updates with the
+  /// `ElementaryMediaTrackListener::OnSessionIdChanged()` event.
   ///
-  /// @return <code>Result\<::SessionId\></code> with the <code>operation_result
-  /// </code> field set to <code>OperationResult::kSuccess</code> and a valid
-  /// <code>SessionId</code> identifying the current session on a success,
-  /// otherwise a code describing an error.
+  /// @return `Result<::SessionId>` with the `operation_result` field set to
+  /// `OperationResult::kSuccess` and a valid `SessionId` identifying the
+  /// current session on a success, otherwise a code describing an error.
   ///
-  /// @sa SessionId
-  /// @sa ElementaryMediaPacket::session_id
-  /// @sa ElementaryMediaTrackListener::OnSessionIdChanged
+  /// @sa `SessionId`
+  /// @sa `ElementaryMediaPacket::session_id`
+  /// @sa `ElementaryMediaTrackListener::OnSessionIdChanged`
   Result<SessionId> GetSessionId() const;
 
-  /// Returns current state of this track.
-  /// <br>
-  /// Open track can accept <code>ElementaryMediaPacket</code> objects. Track
-  /// will open just before source enters
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpen</code> state.
-  /// <br>
-  /// Closed track can't accept <code>ElementaryMediaPacket</code> objects.
-  /// Track will close just after source leaves
-  /// <code>ElementaryMediaStreamSource::ReadyState::kOpen</code> state.
+  /// Returns the current state of this track.
   ///
-  /// @return <code>Result\<::Seconds\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> and
-  /// <code>true</code> if the track is open, otherwise <code>false</code>
-  /// on success, or a code describing the error.
+  /// An open track can accept `ElementaryMediaPacket` objects. Tracks open
+  /// just before source enters `ElementaryMediaStreamSource::ReadyState::kOpen`
+  /// state.
+  ///
+  /// A closed track can't accept `ElementaryMediaPacket` objects. Tracks close
+  /// just after source leaves `ElementaryMediaStreamSource::ReadyState::kOpen`
+  /// state.
+  ///
+  /// @return `Result<::Seconds>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` and `true` if the track is open, otherwise
+  /// `false` on success or a code describing the error.
   Result<bool> IsOpen() const;
 
-  /// Pass texture to platform to release decoder buffers for new frames.
-  /// Should be called after painting the frame has been completed.
+  /// Release decoder buffers associated with the texture with `texture_id`.
+  /// Should be called after painting the frame has been completed, as number of
+  /// frames App can request simultaneously is limited by Platform.
   ///
-  /// @warning Can only be called in the
-  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
-  /// <code>ElementaryMediaStreamSource</code>.
-  /// Valid only for video track.
+  /// @remark
+  /// This mode is supported only on devices which have
+  /// `EmssVersionInfo::has_video_texture` set to `true`.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
-  Result<void> RecycleTexture(GLuint textureId);
+  /// @warning
+  /// * Can only be called in the
+  ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
+  ///   `ElementaryMediaStreamSource`.
+  /// * Valid only for video track.
+  ///
+  /// @param texture_id A texture that will be recycled.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @sa `ElementaryMediaTrack::FillTextureWithNextFrame()`
+  /// @sa `ElementaryMediaTrack::RegisterCurrentGraphicsContext()`
+  Result<void> RecycleTexture(GLuint texture_id);
 
-  /// Pass current graphics context to platform to perform binding of
-  /// video frame content to Open GL textures passed in
-  /// <code>ElementaryMediaTrack::FillTextureWithNextFrame</code> method.
+  /// Binds Player with an OpenGL graphics context associated with this WASM
+  /// module.
   ///
-  /// @warning Bind current graphic context with OpenGLES first.
-  /// Otherwise no action will be performed.
+  /// Must be called before the
+  /// `ElementaryMediaTrack::FillTextureWithNextFrame()` method is called for
+  /// the first time.
   ///
-  /// @warning Can only be called in the
-  /// <code>ElementaryMediaStreamSource::Mode::kVideoTexture</code> mode of
-  /// <code>ElementaryMediaStreamSource</code>.
-  /// Valid only for video track.
+  /// @remark
+  /// This mode is supported only on devices which have
+  /// `EmssVersionInfo::has_video_texture` set to `true`.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @warning
+  /// * Bind current graphic context with OpenGLES first. Otherwise no action
+  ///   will be performed.
+  /// * Can only be called in the
+  ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
+  ///   `ElementaryMediaStreamSource`.
+  /// * Valid only for video track.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @sa `ElementaryMediaTrack::FillTextureWithNextFrame()`
+  /// @sa `ElementaryMediaTrack::RecycleTexture()`
+
+
   Result<void> RegisterCurrentGraphicsContext();
 
   /// Sets media keys used for decrypting packets in this track.
   ///
-  /// @param[in] key Key to be set.
+  /// @param[in] key A `MediaKey` to be used by this track.
   ///
-  /// @warning The ownership isn't transferred, and, as such,
-  /// the key must outlive the track.
+  /// @warning The ownership isn't transferred, and, as such, the key must
+  /// outlive the track.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   ///
-  /// @sa MediaKey
+  /// @sa `MediaKey`
   Result<void> SetMediaKey(MediaKey* key);
 
   /// Sets a listener to receive updates about this track's state changes. Only
   /// one listener can be set: setting another clears the previous one. Pass
-  /// <code>nullptr</code> to reset the listener.
+  /// `nullptr` to reset the listener.
   ///
-  /// @param[in] listener Listener to be set or <code>nullptr</code> to unset
-  /// the listener.
+  /// @param[in] listener Listener to be set or `nullptr` to unset the listener.
   ///
-  /// @warning The ownership isn't transferred, and, as such,
-  /// the listener must outlive the track.
+  /// @warning The ownership isn't transferred, and, as such, the listener must
+  /// outlive the track.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   ///
-  /// @sa ElementaryMediaTrackListener
+  /// @sa `ElementaryMediaTrackListener`
   Result<void> SetListener(ElementaryMediaTrackListener* listener);
 
  private:

@@ -16,21 +16,21 @@
 namespace samsung {
 namespace wasm {
 
-/// Lists supported encryption modes.
+/// Lists encryption modes recognized by WASM Player.
 enum class EncryptionMode {
   kUnknown,  ///< Unknown encryption mode.
   kCenc,     ///< Full sample encryption AESCTR mode.
   kCbcs,     ///< Pattern encryption AESCBC mode.
 };
 
-/// Lists supported Content Decryption Modules.
+/// Lists Content Decryption Modules recognized by WASM Player.
 enum class ContentDecryptionModule {
   kUnknown,    ///< Unknown CDM.
   kPlayready,  ///< Playready CDM.
   kWidevine,   ///< Widevine classic CDM.
 };
 
-/// Lists supported robustness levels.
+/// Lists robustness levels recognized by WASM Player.
 enum class Robustness {
   kEmpty,
   kSWSecureCrypto,
@@ -40,7 +40,7 @@ enum class Robustness {
   kHWSecureAll,
 };
 
-/// Aggregates all necessary data for setting up decryption.
+/// Aggregates all data necessary for setting up decryption.
 struct DRMConfig {
   /// CDM used by content.
   ContentDecryptionModule cdm;
@@ -48,7 +48,7 @@ struct DRMConfig {
   /// Encryption mode used by content.
   EncryptionMode encryption_mode;
 
-  /// URL of license server providing keys to decrypt media.
+  /// URL of license server providing keys required to decrypt media.
   std::string license_server;
 
   /// Buffer containing DRM-specific initialization data.
@@ -67,7 +67,7 @@ struct DRMConfig {
   Robustness video_robustness;
 };
 
-/// Class representing an instance of media keys used to decrypt a content.
+/// Class representing an instance of media keys used to decrypt content.
 class MediaKey final {
  public:
   using SetupFinishedCallback = std::function<void(OperationResult, MediaKey)>;
@@ -78,27 +78,25 @@ class MediaKey final {
   MediaKey& operator=(MediaKey&&);
   ~MediaKey();
 
-  /// Returns <code>true</code> if this instance is valid. This method should
-  /// be called after constructor to ensure backend initialized the object
-  /// properly. If object is invalid all method calls will fail.
+  /// Returns `true` if this instance is valid. This method should be called
+  /// after constructor to ensure the object was initialized properly. If object
+  /// is invalid all method calls will fail.
   ///
-  /// @return <code>true</code> if this instance is valid, otherwise
-  /// <code>false</code>.
+  /// @return `true` if this instance is valid, otherwise `false`.
   bool IsValid() const;
 
-  /// Asynchronously creates MediaKey instance and passes it as an argument to
-  /// <code>on_finished</code>. If setting up the encryption fails, media keys
-  /// won't be valid.
+  /// Asynchronously creates `MediaKey` instance and passes it as an argument to
+  /// `on_finished`. If setting up the encryption fails, media keys won't be
+  /// valid.
   ///
   /// @param[in] config An object containing DRM's configuration.
-  /// @param[in] on_finished A callback notifying end of setting up encryption.
-  /// The callback receives <code>OperationResult</code> informing of the
-  /// result of the operation and a newly created <code>MediaKeys</code> object.
+  /// @param[in] on_finished A callback notifying end of encryption setup. The
+  /// callback receives `OperationResult` informing of the result of the
+  /// operation and a newly created `MediaKeys` object if no error occurred.
   ///
-  /// @return <code>Result\<void\></code> with
-  /// <code>operation_result</code> field set to
-  /// <code>OperationResult::kSuccess</code> on success, otherwise a code
-  /// describing the error.
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
   static Result<void> SetupEncryption(const DRMConfig& config,
                                       SetupFinishedCallback on_finished);
 

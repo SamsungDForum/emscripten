@@ -35,8 +35,7 @@ struct MediaKey::AsyncImpl {
                                  void* userData) {
     auto cb = std::unique_ptr<MediaKey::SetupFinishedCallback>(
         static_cast<MediaKey::SetupFinishedCallback*>(userData));
-    (*cb)(static_cast<OperationResult>(error),
-          MediaKey{media_key_handle});
+    (*cb)(static_cast<OperationResult>(error), MediaKey{media_key_handle});
   }
 };
 

@@ -143,7 +143,8 @@ class HTMLMediaElement final {
 
   // legacy EMSS compatibility: methods
   wasm::Result<void> RegisterOnTimeUpdateEMSS(
-      wasm::ElementaryMediaStreamSourceListener*, int source_handle);
+      wasm::ElementaryMediaStreamSourceListener*,
+      int source_handle);
   void UnregisterOnTimeUpdateEMSS(int source_handle);
 
   int handle_;

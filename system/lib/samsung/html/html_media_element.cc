@@ -27,10 +27,10 @@ void OnTimeUpdateEMSSCallback(void* user_data, float new_time) {
   listener->OnPlaybackPositionChanged(wasm::Seconds(new_time));
 }
 
-void OnErrorListenerCallback(int error_code, const char* error_message,
+void OnErrorListenerCallback(int error_code,
+                             const char* error_message,
                              void* user_data) {
-  const auto listener =
-      static_cast<HTMLMediaElementListener*>(user_data);
+  const auto listener = static_cast<HTMLMediaElementListener*>(user_data);
   listener->OnError(static_cast<MediaError>(error_code), error_message);
 }
 

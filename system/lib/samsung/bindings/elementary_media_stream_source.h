@@ -35,8 +35,9 @@ typedef void (*OnPlaybackPositionChangedCallback)(float newTime,
                                                   void* userData);
 typedef void (*OnOperationDoneCallback)(EMSSOperationResult result,
                                         void* userData);
-typedef void (*OnClosedCaptionsListenerCallback)(
-    const uint8_t* closed_captions, uint32_t captions_length, void* user_data);
+typedef void (*OnClosedCaptionsListenerCallback)(const uint8_t* closed_captions,
+                                                 uint32_t captions_length,
+                                                 void* user_data);
 
 extern int EMSSCreate(EMSSMode latencyMode);
 extern EMSSOperationResult EMSSRemove(int handle);

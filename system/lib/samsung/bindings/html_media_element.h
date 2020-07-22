@@ -16,7 +16,8 @@ extern "C" {
 
 typedef void (*OnEventCallback)(void* userData);
 typedef void (*RegisterOnTimeUpdateEMSSEventCallback)(void*, float);
-typedef void (*OnErrorCallback)(int errorCode, const char* errorMessage,
+typedef void (*OnErrorCallback)(int errorCode,
+                                const char* errorMessage,
                                 void* userData);
 
 extern int mediaElementById(const char* id);
@@ -37,8 +38,7 @@ extern EMSSOperationResult mediaElementGetSrc(int handle, char** out);
 extern EMSSOperationResult mediaElementSetSrc(int handle, const char* newSrc);
 extern EMSSOperationResult mediaElementPlay(
     int handle,
-    void (*finishedCallback)(EMSSOperationResult result,
-                             void* userData),
+    void (*finishedCallback)(EMSSOperationResult result, void* userData),
     void* userData);
 extern EMSSOperationResult mediaElementPause(int handle);
 extern EMSSOperationResult mediaElementSetOnPlaying(int handle,

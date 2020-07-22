@@ -49,11 +49,12 @@ void OnPlaybackPositionChangedListenerCallback(float new_time,
 }
 
 void OnClosedCaptionsListenerCallback(const uint8_t* closed_captions,
-                              uint32_t captions_length,
-                              void* user_data) {
+                                      uint32_t captions_length,
+                                      void* user_data) {
   const auto listener =
       static_cast<ElementaryMediaStreamSourceListener*>(user_data);
-  listener->OnClosedCaptions(closed_captions, static_cast<size_t>(captions_length));
+  listener->OnClosedCaptions(closed_captions,
+                             static_cast<size_t>(captions_length));
 }
 
 }  // namespace
@@ -138,15 +139,15 @@ Result<void> ElementaryMediaStreamSource::Flush() {
 }
 
 Result<void> ElementaryMediaStreamSource::Close(
-    std::function<void(OperationResult)>on_finished_callback) {
-  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
-                                                     EMSSClose, handle_);
+    std::function<void(OperationResult)> on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(
+      on_finished_callback, EMSSClose, handle_);
 }
 
 Result<void> ElementaryMediaStreamSource::Open(
-    std::function<void(OperationResult)>on_finished_callback) {
-  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
-                                                     EMSSOpen, handle_);
+    std::function<void(OperationResult)> on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(
+      on_finished_callback, EMSSOpen, handle_);
 }
 
 Result<Seconds> ElementaryMediaStreamSource::GetDuration() const {

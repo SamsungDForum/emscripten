@@ -249,6 +249,40 @@ class ElementaryMediaTrack final {
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
 
+  /// Fills a provided texture with a decoded video frame synchronously.
+  ///
+  /// The texture should be rendered as soon as possible after it's received.
+  ///
+  /// Player will decode frames sent with `ElementaryMediaTrack::AppendPacket()`
+  /// but won't render them on `HTMLMediaElement` when
+  /// `ElementaryMediaStreamSource` is in the
+  /// `ElementaryMediaStreamSource::Mode::kVideoTexture` mode. Instead, their
+  /// contents can be accessed by calling this method repeatedly.
+  ///
+  /// @remarks
+  /// * When `texture_id` is processed, it must be freed with
+  ///   `ElementaryMediaTrack::RecycleTexture()`.
+  /// * Sets the texture to the `GL_TEXTURE_EXTERNAL_OES` type.
+  /// * This mode is supported only on devices which have
+  ///   `EmssVersionInfo::has_video_texture` set to `true`.
+  ///
+  /// @warning
+  /// * Can only be called in the
+  ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
+  ///   `ElementaryMediaStreamSource`.
+  /// * Blocking method. Cannot be called on main thread.
+  /// * Valid only for video tracks.
+  ///
+  /// @param texture_id A texture that will be filled with video frame.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @sa `ElementaryMediaTrack::RegisterCurrentGraphicsContext()`
+  /// @sa `ElementaryMediaTrack::RecycleTexture()`
+  Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
+
   /// Returns id of the currently active session.
   ///
   /// @remarks
@@ -330,7 +364,6 @@ class ElementaryMediaTrack final {
   ///
   /// @sa `ElementaryMediaTrack::FillTextureWithNextFrame()`
   /// @sa `ElementaryMediaTrack::RecycleTexture()`
-
 
   Result<void> RegisterCurrentGraphicsContext();
 

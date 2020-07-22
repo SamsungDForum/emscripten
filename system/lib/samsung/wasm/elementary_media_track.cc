@@ -78,9 +78,8 @@ void OnSeekListenerCallback(float new_time, void* user_data) {
       ->OnSeek(samsung::wasm::Seconds(new_time));
 }
 
-void OnAppendErrorListenerCallback(
-    EMSSOperationResult append_error,
-    void* user_data) {
+void OnAppendErrorListenerCallback(EMSSOperationResult append_error,
+                                   void* user_data) {
   using samsung::wasm::ElementaryMediaTrack;
   using samsung::wasm::ElementaryMediaTrackListener;
   (static_cast<ElementaryMediaTrackListener*>(user_data))
@@ -112,12 +111,14 @@ class ElementaryMediaTrack::Impl {
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
   Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
-  Result<void> AppendEncryptedPacketAsync(const EncryptedElementaryMediaPacket&);
+  Result<void> AppendEncryptedPacketAsync(
+      const EncryptedElementaryMediaPacket&);
   Result<void> AppendEndOfTrack(SessionId session_id);
   Result<void> AppendEndOfTrackAsync(SessionId session_id);
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
+  Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
   Result<SessionId> GetSessionId() const;
   Result<bool> IsOpen() const;
   Result<void> RecycleTexture(GLuint textureId);
@@ -287,10 +288,18 @@ Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrame(
   if (!version_info_.has_video_texture)
     return {OperationResult::kNotSupported};
 
-  return CAPIAsyncCallWithArg<
-      OperationResult, EMSSOperationResult, uint32_t>(
+  return CAPIAsyncCallWithArg<OperationResult, EMSSOperationResult, uint32_t>(
       elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
       finishedCallback);
+}
+
+Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrameSync(
+    GLuint textureId) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  return CAPICall<void>(elementaryMediaTrackFillTextureWithNextFrameSync,
+                        handle_, textureId);
 }
 
 Result<SessionId> ElementaryMediaTrack::Impl::GetSessionId() const {
@@ -528,6 +537,13 @@ Result<void> ElementaryMediaTrack::FillTextureWithNextFrame(
     return {OperationResult::kInvalidObject};
   return pimpl_->FillTextureWithNextFrame(texture_id,
                                           std::move(finished_callback));
+}
+
+Result<void> ElementaryMediaTrack::FillTextureWithNextFrameSync(
+    GLuint texture_id) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->FillTextureWithNextFrameSync(texture_id);
 }
 
 Result<SessionId> ElementaryMediaTrack::GetSessionId() const {

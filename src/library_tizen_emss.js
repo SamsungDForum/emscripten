@@ -1783,6 +1783,20 @@ const LibraryTizenEmss = {
     }
   },
 
+  elementaryMediaTrackFillTextureWithNextFrameSync__deps: ['$EmssCommon', '$GL'],
+  elementaryMediaTrackFillTextureWithNextFrameSync: function(
+      handle, textureId) {
+    const webGLTexture = GL.textures[textureId];
+    try {
+      tizentvwasm.SideThreadElementaryMediaTrack.getPictureSync(
+          handle, webGLTexture);
+      return EmssCommon.Result.SUCCESS;
+    } catch (error) {
+      console.error(error.message);
+      return EmssCommon._exceptionToErrorCode(error);
+    }
+  },
+
   elementaryMediaTrackGetSessionId__deps: ['$WasmElementaryMediaTrack'],
   elementaryMediaTrackGetSessionId__proxy: 'sync',
   elementaryMediaTrackGetSessionId: function(handle, retPtr) {
@@ -1798,7 +1812,6 @@ const LibraryTizenEmss = {
   },
 
   elementaryMediaTrackRecycleTexture__deps: ['$EmssCommon', '$GL'],
-  elementaryMediaTrackRecycleTexture__proxy: 'sync',
   elementaryMediaTrackRecycleTexture: function(handle, textureId) {
     const webGLTexture = GL.textures[textureId];
     const videoPicture = {
@@ -1807,8 +1820,9 @@ const LibraryTizenEmss = {
     };
 
     try {
-      return WasmElementaryMediaTrack._callFunction(
-        handle, 'recyclePicture', videoPicture);
+      tizentvwasm.SideThreadElementaryMediaTrack.recyclePictureSync(
+          handle, videoPicture);
+      return EmssCommon.Result.SUCCESS;
     } catch (error) {
       console.error(error.message);
       return EmssCommon._exceptionToErrorCode(error);
@@ -1816,12 +1830,12 @@ const LibraryTizenEmss = {
   },
 
   elementaryMediaTrackRegisterCurrentGraphicsContext__deps: ['$EmssCommon', '$GL'],
-  elementaryMediaTrackRegisterCurrentGraphicsContext__proxy: 'sync',
   elementaryMediaTrackRegisterCurrentGraphicsContext: function(handle) {
     const webGLContext = GL.currentContext.GLctx;
     try {
-      return WasmElementaryMediaTrack._callFunction(
-        handle, 'setWebGLRenderingContext', webGLContext);
+      tizentvwasm.SideThreadElementaryMediaTrack.setWebGLRenderingContext(
+          handle, webGLContext);
+      return EmssCommon.Result.SUCCESS;
     } catch (error) {
       console.error(error.message);
       return EmssCommon._exceptionToErrorCode(error);

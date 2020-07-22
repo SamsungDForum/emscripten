@@ -49,6 +49,8 @@ const char* EMSSOperationResultToString(EMSSOperationResult result) {
       return "Track limit reached";
     case EmssUnrelatedObject:
       return "Unrelated object";
+    case EmssAborted:
+      return "Operation aborted";
     case EmssConfigInvalidChannelLayout:
       return "Invalid channel layout";
     case EmssConfigInvalidCodec:
@@ -63,8 +65,6 @@ const char* EMSSOperationResultToString(EMSSOperationResult result) {
       return "Invalid Sample Format";
     case EmssConfigInvalid:
       return "Config Invalid";
-    case EmssAppendAborted:
-      return "Append aborted";
     case EmssAppendBufferFull:
       return "Buffer full";
     case EmssAppendExpectsKeyframe:

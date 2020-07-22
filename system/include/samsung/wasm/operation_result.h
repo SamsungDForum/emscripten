@@ -100,6 +100,9 @@ enum class OperationResult {
   /// object).
   kUnrelatedObject,
 
+  /// The operation was aborted.
+  kAborted,
+
   /// The operation failed due to an unspecified reason.
   kFailed,
 
@@ -127,9 +130,6 @@ enum class OperationResult {
   kConfigInvalid,
 
   // Packet append errors:
-
-  /// The append was aborted.
-  kAppendAborted,
 
   /// The append failed due to Platform's packet buffer overflow.
   ///

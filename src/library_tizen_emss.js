@@ -87,19 +87,19 @@ const LibraryTizenEmss = {
         TIMESTAMPS_EXCEED_DURATION: 17,
         TRACK_LIMIT_REACHED: 18,
         UNRELATED_OBJECT: 19,
-        FAILED: 20,
+        ABORTED: 20,
+        FAILED: 21,
 
         // Config verification errors:
-        INVALID_CHANNEL_LAYOUT: 21,
-        INVALID_CODEC: 22,
-        INVALID_FRAMERATE: 23,
-        INVALID_RESOLUTION: 24,
-        INVALID_MIME_TYPE: 25,
-        INVALID_SAMPLE_FORMAT: 26,
-        INVALID_CONFIG: 27,
+        INVALID_CHANNEL_LAYOUT: 22,
+        INVALID_CODEC: 23,
+        INVALID_FRAMERATE: 24,
+        INVALID_RESOLUTION: 25,
+        INVALID_MIME_TYPE: 26,
+        INVALID_SAMPLE_FORMAT: 27,
+        INVALID_CONFIG: 28,
 
         // Packet append errors:
-        ABORTED: 28,
         BUFFER_FULL: 29,
         EXPECTS_KEYFRAME: 30,
         APPEND_IGNORED: 31,
@@ -122,7 +122,7 @@ const LibraryTizenEmss = {
         UNKNOWN_DECRYPTION_MODE: 46,
 
         // Media key errors:
-        INVALID_CONFIGRUATION: 47,
+        INVALID_CONFIGURATION: 47,
         SESSION_NOT_UPDATED: 48,
 
         // Video decoder errors:
@@ -133,6 +133,63 @@ const LibraryTizenEmss = {
       });
 
       // C++ -> JS conversion maps (int-indexed arrays)
+      const EXCEPTION_TO_RESULT = new Map([
+        ['InvalidArgumentError',                       Result.INVALID_ARGUMENT                 ],
+        ['InvalidStateError',                          Result.INVALID_STATE                    ],
+        ['NotAllowedError',                            Result.NOT_ALLOWED                      ],
+        ['NotSupportedError',                          Result.NOT_SUPPORTED                    ],
+        ['AlreadyDestroyedError',                      Result.ALREADY_DESTROYED                ],
+        ['AlreadyInProgressError',                     Result.ALREADY_IN_PROGRESS              ],
+        ['CloseInProgressError',                       Result.CLOSE_IN_PROGRESS                ],
+        ['NotAllowedInCurrentModeError',               Result.NOT_ALLOWED_IN_CURRENT_MODE      ],
+        ['NoTracksAttachedError',                      Result.NO_TRACKS_ATTACHED               ],
+        ['OpenInProgressError',                        Result.OPEN_IN_PROGRESS                 ],
+        ['PlaybackStateChangeInProgressError',         Result.PLAYBACK_STATE_CHANGE_IN_PROGRESS],
+        ['SourceMustBeClosedError',                    Result.SOURCE_MUST_BE_CLOSED            ],
+        ['SourceNotAttachedError',                     Result.SOURCE_NOT_ATTACHED              ],
+        ['TimestampsExceedDurationError',              Result.TIMESTAMPS_EXCEED_DURATION       ],
+        ['TrackLimitReachedError',                     Result.TRACK_LIMIT_REACHED              ],
+        ['UnrelatedObjectError',                       Result.UNRELATED_OBJECT                 ],
+        ['AbortError',                                 Result.ABORTED                          ],
+        ['UnknownError',                               Result.FAILED                           ],
+
+        // Config verification errors:
+        ['ConfigInvalidChannelLayoutError',            Result.INVALID_CHANNEL_LAYOUT           ],
+        ['ConfigInvalidCodecError',                    Result.INVALID_CODEC                    ],
+        ['ConfigInvalidFramerateError',                Result.INVALID_FRAMERATE                ],
+        ['ConfigInvalidResolutionError',               Result.INVALID_RESOLUTION               ],
+        ['ConfigInvalidMimeTypeError',                 Result.INVALID_MIME_TYPE                ],
+        ['ConfigInvalidSampleFormatError',             Result.INVALID_SAMPLE_FORMAT            ],
+        ['ConfigInvalidError',                         Result.INVALID_CONFIG                   ],
+
+        // Packet append errors:
+        ['AppendBufferFullError',                      Result.BUFFER_FULL                      ],
+        ['AppendExpectsKeyframeError',                 Result.EXPECTS_KEYFRAME                 ],
+        ['AppendIgnoredError',                         Result.APPEND_IGNORED                   ],
+        ['AppendNoDurationError',                      Result.NO_DURATION                      ],
+        ['AppendInvalidDtsError',                      Result.INVALID_DTS                      ],
+        ['AppendInvalidPtsError',                      Result.INVALID_PTS                      ],
+        ['AppendInvalidTrackStateError',               Result.INVALID_TRACK_STATE              ],
+        ['AppendInvalidVideoParametersError',          Result.INVALID_VIDEO_PARAMETERS         ],
+        ['AppendNoPacketDataError',                    Result.NO_PACKET_DATA                   ],
+        ['AppendResourceAllocationError',              Result.RESOURCE_ALLOCATION              ],
+
+        // Encrypted packet append errors:
+        ['AppendDecryptionError',                      Result.DECRYPTION_ERROR                 ],
+        ['AppendDecryptorNeedsMoreDataError',          Result.DECRYPTOR_NEEDS_MORE_DATA        ],
+        ['AppendNoDecryptionKeyError',                 Result.NO_DECRYPTION_KEY                ],
+        ['AppendInvalidInitializationVectorError',     Result.INVALID_INITIALIZATION_VECTOR    ],
+        ['AppendInvalidKeyIdError',                    Result.INVALID_KEY_ID                   ],
+        ['AppendInvalidMediaKeySessionError',          Result.INVALID_MEDIA_KEY_SESSION        ],
+        ['AppendInvalidSubsampleDescriptionError',     Result.INVALID_SUBSAMPLE_DESCRIPTION    ],
+        ['AppendUnknownDecryptionModeError',           Result.UNKNOWN_DECRYPTION_MODE          ],
+
+        // Video decoder errors:
+        ['VideoDecoderInvalidTrackTypeError',          Result.INVALID_TRACK_TYPE               ],
+        ['VideoDecoderInvalidVideoTextureError',       Result.INVALID_VIDEO_TEXTURE            ],
+        ['VideoDecoderWebGlContextNotRegisteredError', Result.WEBGL_CONTEXT_NOT_REGISTERED     ],
+        ['VideoDecoderNotInVideoTextureModeError',     Result.NOT_IN_VIDEO_TEXTURE_MODE        ],
+      ]);
 
       const ERROR_TO_RESULT = new Map([
         // Elementary Media Stream Source errors:
@@ -369,6 +426,12 @@ const LibraryTizenEmss = {
           if (error == null) {
             return Result.SUCCESS;
           }
+
+          let errorCode = error.name;
+          if (EXCEPTION_TO_RESULT.has(errorCode)) {
+            return EXCEPTION_TO_RESULT.get(errorCode);
+          }
+
           let errorMessage = error.message;
           const splitLine = errorMessage.search("': ");
           const errMsgLength = errorMessage.length;

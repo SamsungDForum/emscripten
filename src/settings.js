@@ -719,7 +719,7 @@ var FILESYSTEM = 1;
 // Makes full filesystem support be included, even if statically it looks like
 // it is not used. For example, if your C code uses no files, but you include
 // some JS that does, you might need this.
-var FORCE_FILESYSTEM = 0;
+var FORCE_FILESYSTEM = 1;
 
 // Enables support for the NODERAWFS filesystem backend. This is a special
 // backend as it replaces all normal filesystem access with direct Node.js

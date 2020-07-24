@@ -426,12 +426,13 @@ const LibraryTizenEmss = {
           if (error == null) {
             return Result.SUCCESS;
           }
-
-          let errorCode = error.name;
-          if (EXCEPTION_TO_RESULT.has(errorCode)) {
-            return EXCEPTION_TO_RESULT.get(errorCode);
+          // isApiSupported method is not present on platforms with legacy emss
+          if (tizentvwasm.isApiSupported) {
+            let errorCode = error.name;
+            if (EXCEPTION_TO_RESULT.has(errorCode)) {
+              return EXCEPTION_TO_RESULT.get(errorCode);
+            }
           }
-
           let errorMessage = error.message;
           const splitLine = errorMessage.search("': ");
           const errMsgLength = errorMessage.length;

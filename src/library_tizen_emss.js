@@ -1513,6 +1513,38 @@ const LibraryTizenEmss = {
       'playbackpositionchanged');
   },
 
+  EMSSSetOnClosedCaptions__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSSetOnClosedCaptions__proxy: 'sync',
+  EMSSSetOnClosedCaptions: function(
+      handle, eventHandler, userData) {
+    return WasmElementaryMediaStreamSource._setListener(
+      handle,
+      'closedcaptions',
+      (event) => {
+        const captions = event.closedCaptions;
+        const captionsLength = captions.byteLength;
+        const captionsPtr = _malloc(captionsLength);
+        const captionsArray = new Uint8Array(captions);
+        try {
+          writeArrayToMemory(captionsArray, captionsPtr);
+          {{{ makeDynCall('viii') }}} (
+            eventHandler, captionsPtr, captionsLength, userData);
+        } catch (error) {
+          console.error(error.message);
+        } finally {
+          _free(captionsPtr);
+        }
+      });
+  },
+
+  EMSSUnsetOnClosedCaptions__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSUnsetOnClosedCaptions__proxy: 'sync',
+  EMSSUnsetOnClosedCaptions: function(handle) {
+    return WasmElementaryMediaStreamSource._unsetListener(
+      handle,
+      'closedcaptions');
+  },
+
   EMSSSetOnSourceOpen__deps: ['$WasmElementaryMediaStreamSource'],
   EMSSSetOnSourceOpen__proxy: 'sync',
   EMSSSetOnSourceOpen: function(handle, eventHandler, userData) {

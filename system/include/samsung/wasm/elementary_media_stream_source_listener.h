@@ -48,6 +48,20 @@ class ElementaryMediaStreamSourceListener {
   ///
   /// @param[in] new_time New playback position.
   virtual void OnPlaybackPositionChanged(Seconds /*new_time*/) {}
+
+  /// This event is emitted immediately after VBI closed captions data is
+  /// detected and read from a video stream. `closed_captions` contain raw VBI
+  /// data. It must be decoded and displayed by the application when it
+  /// receives this event.
+  ///
+  /// @param[in] closed_captions Pointer to array with processed subtitles.
+  /// @param[in] captions_length Length of processed subtitles array.
+  /// @remarks
+  /// An ownership of `closed_captions` is not transferred and is valid only for
+  /// the duration of the `OnClosedCaptions()` call. Do not remove this array
+  /// manually!
+  virtual void OnClosedCaptions(const uint8_t* /*closed_captions*/,
+                                size_t /*captions_length*/) {}
 };
 
 }  // namespace wasm

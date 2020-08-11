@@ -48,6 +48,14 @@ void OnPlaybackPositionChangedListenerCallback(float new_time,
   listener->OnPlaybackPositionChanged(Seconds(new_time));
 }
 
+void OnClosedCaptionsListenerCallback(const uint8_t* closed_captions,
+                              uint32_t captions_length,
+                              void* user_data) {
+  const auto listener =
+      static_cast<ElementaryMediaStreamSourceListener*>(user_data);
+  listener->OnClosedCaptions(closed_captions, static_cast<size_t>(captions_length));
+}
+
 }  // namespace
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(Mode mode)
@@ -209,6 +217,10 @@ OperationResult ElementaryMediaStreamSource::SetListenerInternal(
       LISTENER_OP(EMSSSetOnPlaybackPositionChanged, handle_,
                   OnPlaybackPositionChangedListenerCallback, listener);
     }
+
+    LISTENER_OP(EMSSSetOnClosedCaptions, handle_,
+                OnClosedCaptionsListenerCallback, listener);
+
     LISTENER_OP(EMSSSetOnSourceDetached, handle_,
                 ListenerCallback<
                     ElementaryMediaStreamSourceListener,

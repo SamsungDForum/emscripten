@@ -1337,6 +1337,9 @@ var USE_SSL = 0;
 // 1 == use cURL from emscripten ports
 var USE_CURL = 0;
 
+// 1 == use FFMPEG from emscripten ports
+var USE_FFMPEG = 0;
+
 // Formats to support in SDL2_image. Valid values: bmp, gif, lbm, pcx, png, pnm, tga, xcf, xpm, xv
 var SDL2_IMAGE_FORMATS = [];
 

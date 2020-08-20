@@ -233,53 +233,41 @@ var SyscallsLibrary = {
     isSocket: function(fd) {
       return SOCKFS.hasSocket(fd);
     },
-    syscall142ContainsSockets: function(args) {
-      let arg_ptr = args[1];
-      let nfds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
-      let readfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
-      let writefds = {{{ makeGetValue('arg_ptr', '8', 'i32') }}};
-      let exceptfds = {{{ makeGetValue('arg_ptr', '12', 'i32') }}};
+    syscall142CountSocketFDs: function(args) {
+      const arg_ptr = args[1];
+      const nfds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+      const readfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
+      const writefds = {{{ makeGetValue('arg_ptr', '8', 'i32') }}};
+      const exceptfds = {{{ makeGetValue('arg_ptr', '12', 'i32') }}};
 
-      let allLow = (readfds ? {{{ makeGetValue('readfds', 0, 'i32') }}} : 0) |
-                   (writefds ? {{{ makeGetValue('writefds', 0, 'i32') }}} : 0) |
-                   (exceptfds ? {{{ makeGetValue('exceptfds', 0, 'i32') }}} : 0);
-      let allHigh = (readfds ? {{{ makeGetValue('readfds', 4, 'i32') }}} : 0) |
-                    (writefds ? {{{ makeGetValue('writefds', 4, 'i32') }}} : 0) |
-                    (exceptfds ? {{{ makeGetValue('exceptfds', 4, 'i32') }}} : 0);
-
-      let check = function(fd, low, high, val) {
-        return (fd < 32 ? (low & val) : (high & val));
-      };
-
-      let any_fd = -1;
-      for (var fd = 0; fd < nfds; fd++) {
-        const mask = 1 << (fd % 32);
-        if (check(fd, allLow, allHigh, mask)) {
-          any_fd = fd;
-          break;
-        }
-      }
-      if (any_fd < 0) {
-        return false;
-      }
-      return SOCKFS.hasSocket(any_fd);
+      return SOCKFS.countFDsInFdSets(nfds, readfds, writefds, exceptfds);
     },
-    syscall168ContainsSockets: function(args) {
+    // This will be called as select syscall when all FDs in all sets are
+    // Tizen sockets (see jsifier.js).
+    syscall142TizenSocketOnly: function(args) {
+      const arg_ptr = args[1];
+      const nfds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+      const readfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
+      const writefds = {{{ makeGetValue('arg_ptr', '8', 'i32') }}};
+      const exceptfds = {{{ makeGetValue('arg_ptr', '12', 'i32') }}};
+      const timeout = {{{ makeGetValue('arg_ptr', '16', 'i32') }}};
+
+      return SOCKFS.callSelect(nfds, readfds, writefds, exceptfds, timeout);
+    },
+    syscall168CountSocketFDs: function(args) {
       let arg_ptr = args[1];
       let fds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
       let nfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
-      let any_fd = -1;
-      for (var i = 0; i < nfds; i++) {
-        let pollfd = fds + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
-        any_fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
-        if (any_fd >= 0) {
-          break;
-        }
-      }
-      if (any_fd < 0) {
-        return false;
-      }
-      return SOCKFS.hasSocket(any_fd);
+      return SOCKFS.countFDsInPollFDs(fds, nfds);
+    },
+    // This will be called as poll syscall when all FDs in all sets are
+    // Tizen sockets (see jsifier.js).
+    syscall168TizenSocketOnly: function(args) {
+      let arg_ptr = args[1];
+      let fds = {{{ makeGetValue('arg_ptr', '0', 'i32') }}};
+      let nfds = {{{ makeGetValue('arg_ptr', '4', 'i32') }}};
+      let timeout = {{{ makeGetValue('arg_ptr', '8', 'i32') }}};
+      return SOCKFS.callPoll(fds, nfds, timeout);
     },
 #endif
     getSocketFromFD: function() {
@@ -939,6 +927,9 @@ var SyscallsLibrary = {
     FS.chdir(stream.path);
     return 0;
   },
+  // This will be called as select syscall when all FDs in all sets
+  // ARE NOT Tizen sockets, otherwise syscall142TizenSocketOnly
+  // will be used (see jsifier.js)
   __syscall142: function(which, varargs) { // newselect
     // readfds are supported,
     // writefds checks socket open status
@@ -1063,6 +1054,9 @@ var SyscallsLibrary = {
   __syscall163: function(which, varargs) { // mremap
     return -{{{ cDefine('ENOMEM') }}}; // never succeed
   },
+  // This will be called as poll syscall when all FDs in all sets
+  // ARE NOT Tizen sockets, otherwise syscall168TizenSocketOnly
+  // will be used (see jsifier.js)
   __syscall168: function(which, varargs) { // poll
     const start_time = new Date();
     var fds = SYSCALLS.get(), nfds = SYSCALLS.get(), timeout = SYSCALLS.get();

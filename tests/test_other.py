@@ -7065,9 +7065,9 @@ int main() {
     'O0': ([],      [], ['waka'], 22849), # noqa
     'O1': (['-O1'], [], ['waka'], 10533), # noqa
     'O2': (['-O2'], [], ['waka'], 10256), # noqa
-    'O3': (['-O3'], [], [],        1999), # noqa; in -O3, -Os and -Oz we metadce
-    'Os': (['-Os'], [], [],        2010), # noqa
-    'Oz': (['-Oz'], [], [],        2004), # noqa
+    'O3': (['-O3'], [], [],        2106), # noqa; in -O3, -Os and -Oz we metadce
+    'Os': (['-Os'], [], [],        2117), # noqa
+    'Oz': (['-Oz'], [], [],        2111), # noqa
     # finally, check what happens when we export nothing. wasm should be almost empty
     'export_nothing':
           (['-Os', '-s', 'EXPORTED_FUNCTIONS=[]'],    [], [],     61), # noqa
@@ -8457,6 +8457,7 @@ int main () {
                                '-s', 'GL_POOL_TEMP_BUFFERS=0',
                                '-s', 'MIN_CHROME_VERSION=58',
                                '-s', 'NO_FILESYSTEM=1',
+                               '-s', 'WASM_BIGINT=1',
                                '--output_eol', 'linux',
                                '-Oz',
                                '--closure', '1',
@@ -8948,7 +8949,7 @@ int main(void) {
     # Changing this option to [] should decrease code size.
     self.assertLess(changed, normal)
     # Check an absolute code size as well, with some slack.
-    self.assertLess(abs(changed - 5795), 150)
+    self.assertLess(abs(changed - 5895), 150)
 
   def test_llvm_includes(self):
     create_test_file('atomics.c', '#include <stdatomic.h>')

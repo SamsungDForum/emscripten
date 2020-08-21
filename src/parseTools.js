@@ -1455,9 +1455,13 @@ function asmFFICoercion(value, type) {
 }
 
 function makeDynCall(sig) {
-  // TODO(sbc): Should this be: exportedAsmFunc('dynCall_' + sig);
-  // See https://github.com/emscripten-core/emscripten/pull/11991;
-  return 'dynCall_' + sig;
+  if (USE_LEGACY_DYNCALLS) {
+    // TODO(sbc): Should this be: exportedAsmFunc('dynCall_' + sig);
+    // See https://github.com/emscripten-core/emscripten/pull/11991;
+    return 'dynCall_' + sig;
+  } else {
+    return 'getDynCaller("' + sig + '")';
+  }
 }
 
 function heapAndOffset(heap, ptr) { // given   HEAP8, ptr   , we return    splitChunk, relptr

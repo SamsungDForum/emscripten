@@ -234,7 +234,7 @@ var LibraryJSEvents = {
     },
   },
 
-  _registerKeyEventCallback__deps: ['$JSEvents', '$findEventTarget'],
+  _registerKeyEventCallback__deps: ['$JSEvents', '$findEventTarget', '$getDynCaller'],
   _registerKeyEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -502,7 +502,7 @@ var LibraryJSEvents = {
 #endif
   },
 
-  _registerMouseEventCallback__deps: ['$JSEvents', '_fillMouseEventData', '$findEventTarget'],
+  _registerMouseEventCallback__deps: ['$JSEvents', '_fillMouseEventData', '$findEventTarget', '$getDynCaller'],
   _registerMouseEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -706,7 +706,7 @@ var LibraryJSEvents = {
     }
   },
 
-  _registerUiEventCallback__deps: ['$JSEvents', '$findEventTarget'],
+  _registerUiEventCallback__deps: ['$JSEvents', '$findEventTarget', '$getDynCaller'],
   _registerUiEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -859,7 +859,7 @@ var LibraryJSEvents = {
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenDeviceOrientationEvent.absolute, 'e.absolute', 'i32') }}};
   },
 
-  _registerDeviceOrientationEventCallback__deps: ['$JSEvents', '_fillDeviceOrientationEventData', '$findEventTarget'],
+  _registerDeviceOrientationEventCallback__deps: ['$JSEvents', '_fillDeviceOrientationEventData', '$findEventTarget', '$getDynCaller'],
   _registerDeviceOrientationEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -1006,7 +1006,7 @@ var LibraryJSEvents = {
     {{{ makeSetValue('eventStruct', C_STRUCTS.EmscriptenOrientationChangeEvent.orientationAngle, 'orientation', 'i32') }}};
   },
 
-  _registerOrientationChangeEventCallback__deps: ['$JSEvents', '_fillOrientationChangeEventData', '$findEventTarget'],
+  _registerOrientationChangeEventCallback__deps: ['$JSEvents', '_fillOrientationChangeEventData', '$findEventTarget', '$getDynCaller'],
   _registerOrientationChangeEventCallback: function(target, userData, useCapture, callbackfunc, eventTypeId, eventTypeString, targetThread) {
 #if USE_PTHREADS
     targetThread = JSEvents.getTargetThreadForEventCallback(targetThread);
@@ -2656,6 +2656,7 @@ var LibraryJSEvents = {
     cancelAnimationFrame(id);
   },
 
+  emscripten_request_animation_frame_loop__deps: ['$getDynCaller'],
   emscripten_request_animation_frame_loop: function(cb, userData) {
     function tick(timeStamp) {
       if ({{{ makeDynCall('idi') }}}(cb, timeStamp, userData)) {

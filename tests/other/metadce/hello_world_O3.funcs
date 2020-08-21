@@ -6,6 +6,7 @@ $__stdio_write
 $__towrite
 $__wasm_call_ctors
 $fwrite
+$legalstub$dynCall_jiji
 $main
 $memcpy
 $puts

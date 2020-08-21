@@ -428,9 +428,9 @@ function callRuntimeCallbacks(callbacks) {
     var func = callback.func;
     if (typeof func === 'number') {
       if (callback.arg === undefined) {
-        Module['dynCall_v'](func);
+        dynCall('v', func);
       } else {
-        Module['dynCall_vi'](func, callback.arg);
+        dynCall('vi', func, [callback.arg]);
       }
     } else {
       func(callback.arg === undefined ? null : callback.arg);

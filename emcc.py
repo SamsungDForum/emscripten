@@ -1255,6 +1255,9 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
     if shared.Settings.RELOCATABLE:
       shared.Settings.ALLOW_TABLE_GROWTH = 1
 
+    if shared.Settings.WASM2C or shared.Settings.ASYNCIFY or shared.Settings.EMBIND:
+      shared.Settings.USE_LEGACY_DYNCALLS = 1
+
     # Reconfigure the cache now that settings have been applied. Some settings
     # such as LTO and SIDE_MODULE/MAIN_MODULE effect which cache directory we use.
     shared.reconfigure_cache()
@@ -1516,14 +1519,12 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
         'removeRunDependency',
       ]
 
+    if shared.Settings.USE_PTHREADS or shared.Settings.EXIT_RUNTIME:
+      shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE += ['$getDynCaller']
+
     if shared.Settings.USE_PTHREADS:
       # memalign is used to ensure allocated thread stacks are aligned.
       shared.Settings.EXPORTED_FUNCTIONS += ['_memalign', '_malloc']
-
-      # dynCall_ii is used to call pthread entry points in worker.js (as
-      # metadce does not consider worker.js, which is external, we must
-      # consider it a user export, i.e., one which can never be removed).
-      building.user_requested_exports += ['dynCall_ii']
 
       if shared.Settings.MINIMAL_RUNTIME:
         building.user_requested_exports += ['exit']

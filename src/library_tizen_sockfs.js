@@ -1086,8 +1086,13 @@ mergeInto(LibraryManager.library, {
       });
       return result;
     },
+    getFDsUnionAtOffset: function(offset, readfds, writefds, exceptfds) {
+      return (readfds ? {{{ makeGetValue('readfds', 'offset', 'i32') }}} : 0)
+           | (writefds ? {{{ makeGetValue('writefds', 'offset', 'i32') }}} : 0)
+           | (exceptfds ? {{{ makeGetValue('exceptfds', 'offset', 'i32') }}} : 0);
+    },
     countFDsInFdSets: function(nfds, readfds, writefds, exceptfds) {
-      let ret = {
+      const ret = {
         total: 0,
         sockets: 0
       };
@@ -1097,14 +1102,8 @@ mergeInto(LibraryManager.library, {
         return ret;
       }
 
-      let getFDs = function(offset) {
-        return (readfds ? {{{ makeGetValue('readfds', 'offset', 'i32') }}} : 0) |
-               (writefds ? {{{ makeGetValue('writefds', 'offset', 'i32') }}} : 0) |
-               (exceptfds ? {{{ makeGetValue('exceptfds', 'offset', 'i32') }}} : 0);
-      };
-
       let offset = 0;
-      let fds = getFDs(offset);
+      let fds = SOCKFS.getFDsUnionAtOffset(offset, readfds, writefds, exceptfds);
       let fdShift = 0;
       for (let fd = 0; fd < nfds; fd++) {
         if ((fds & (1 << fdShift)) !== 0) {
@@ -1116,88 +1115,88 @@ mergeInto(LibraryManager.library, {
         if (fdShift === 32) {
           fdShift = 0;
           offset += 4
-          fds = getFDs(offset);
+          fds = SOCKFS.getFDsUnionAtOffset(offset, readfds, writefds, exceptfds);
         }
       }
 
       return ret;
     },
+    fdsToSequence: function(nfds, fdsSetPtr, sockFDMap) {
+      if (!fdsSetPtr) {
+        return [];
+      }
+
+      const ret = [];
+      let offset = 0;
+      let fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
+      let fdShift = 0;
+      for (let fd = 0; fd < nfds; ++fd) {
+        if ((fds & (1 << fdShift)) !== 0) {
+          const sockFd = SOCKFS.getSocket(fd).sock_fd;
+          sockFDMap[sockFd] = fd;
+          ret.push(sockFd);
+        }
+
+        ++fdShift;
+        if (fdShift === 32) {
+          fdShift = 0;
+          offset += 4;
+          fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
+        }
+      }
+
+      return ret;
+    },
+    FD_ZERO: function(s) {  // Same name as FD_ZERO macro in select.h
+      for (let i = 0; i < SOCKFS.sizeof.FD_SET; ++i) {
+        HEAP8[s + i] = 0;
+      }
+    },
+    FD_SET: function(d, s) {  // Same name as FD_SET macro in select.h
+      HEAPU32[(s + ((d)/(8))) >> 2] |= (1 << (d) % (8*4));
+    },
+    setDescriptors: function(fdsSetPtr, resultSet, sockFDMap) {
+      if (!fdsSetPtr) {
+        return;
+      }
+
+      SOCKFS.FD_ZERO(fdsSetPtr);
+      for (const fd of resultSet) {
+        SOCKFS.FD_SET(sockFDMap[fd], fdsSetPtr);
+      }
+    },
+    timevalToUSec: function(timeoutPtr) {
+      if (!timeoutPtr) {
+        return -1;
+      }
+
+      const timevalTVSec = {{{ makeGetValue('timeoutPtr', C_STRUCTS.timeval.tv_sec, 'i32') }}};
+      const timevalTVUSec = {{{ makeGetValue('timeoutPtr', C_STRUCTS.timeval.tv_usec, 'i32') }}};
+      return (timevalTVSec * 1000000) + timevalTVUSec;
+    },
     callSelect: function(nfds, readfds, writefds, exceptfds, timeout) {
-      let sockFDMap = new Map();
-      let fdsToSequence = function(nfds, fdsSetPtr) {
-        if (!fdsSetPtr) {
-          return [];
-        }
-
-        let ret = [];
-        let offset = 0;
-        let fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
-        let fdShift = 0;
-        for (let fd = 0; fd < nfds; ++fd) {
-          if ((fds & (1 << fdShift)) !== 0) {
-            const sockFd = SOCKFS.getSocket(fd).sock_fd;
-            sockFDMap[sockFd] = fd;
-            ret.push(sockFd);
-          }
-
-          ++fdShift;
-          if (fdShift === 32) {
-            fdShift = 0;
-            offset += 4;
-            fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
-          }
-        }
-
-        return ret;
-      };
-
-      const readSeq = fdsToSequence(nfds, readfds);
-      const writeSeq = fdsToSequence(nfds, writefds);
-      const exceptSeq = fdsToSequence(nfds, exceptfds);
-
-      const timevalTVSec = {{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_sec, 'i32') }}};
-      const timevalTVUSec = {{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_usec, 'i32') }}};
-      const timeoutUSec = (timevalTVSec * 1000000) + timevalTVUSec;
-
+      const sockFDMap = new Map();
+      const readSeq = SOCKFS.fdsToSequence(nfds, readfds, sockFDMap);
+      const writeSeq = SOCKFS.fdsToSequence(nfds, writefds, sockFDMap);
+      const exceptSeq = SOCKFS.fdsToSequence(nfds, exceptfds, sockFDMap);
+      const timeoutUSec = SOCKFS.timevalToUSec(timeout);
       let result = null;
       try {
-        result = tizentvwasm.SocketsManager.select(readSeq, writeSeq, exceptSeq,
-          timeoutUSec);
+        result = tizentvwasm.SocketsManager.select(readSeq, writeSeq, exceptSeq, timeoutUSec);
       } catch (err) {
         return -SOCKFS.getErrorCode();
       }
 
-      let setDescriptors = function(fdsSetPtr, resultSet) {
-        let FD_ZERO = function(s) {
-          for (let i = 0; i < SOCKFS.sizeof.FD_SET; ++i) {
-            HEAP8[s + i] = 0;
-          }
-        }
-
-        let FD_SET = function(d, s) {
-          HEAPU32[(s + ((d)/(8))) >> 2] |= (1 << (d) % (8*4));
-        }
-
-        if (!fdsSetPtr) {
-          return;
-        }
-
-        FD_ZERO(fdsSetPtr);
-        for (const fd of resultSet) {
-          FD_SET(sockFDMap[fd], fdsSetPtr);
-        }
-      };
-
-      setDescriptors(readfds, result.getReadFds());
-      setDescriptors(writefds, result.getWriteFds());
-      setDescriptors(exceptfds, result.getExceptFds());
+      SOCKFS.setDescriptors(readfds, result.getReadFds(), sockFDMap);
+      SOCKFS.setDescriptors(writefds, result.getWriteFds(), sockFDMap);
+      SOCKFS.setDescriptors(exceptfds, result.getExceptFds(), sockFDMap);
 
       return result.getReadFds().length
            + result.getWriteFds().length
            + result.getExceptFds().length;
     },
     countFDsInPollFDs: function(fds, nfds) {
-      let ret = {
+      const ret = {
         total: nfds,
         sockets: 0
       };
@@ -1215,7 +1214,7 @@ mergeInto(LibraryManager.library, {
       return ret;
     },
     callPoll: function(fdsPtr, nfds, timeout) {
-      let pollFds = [];
+      const pollFds = [];
 
       for (let i = 0; i < nfds; i++) {
         const pollfd = fdsPtr + {{{ C_STRUCTS.pollfd.__size__ }}} * i;

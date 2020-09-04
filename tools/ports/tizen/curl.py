@@ -421,7 +421,7 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* #undef HAVE_FDOPEN */
 
 /* Define to 1 if you have the `fork' function. */
-#define HAVE_FORK 1
+/* #undef HAVE_FORK */
 
 /* Define to 1 if you have the freeaddrinfo function. */
 #define HAVE_FREEADDRINFO 1
@@ -740,7 +740,7 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 #define HAVE_POLL 1
 
 /* If you have a fine poll */
-/* #undef HAVE_POLL_FINE */
+#define HAVE_POLL_FINE 1
 
 /* Define to 1 if you have the <poll.h> header file. */
 #define HAVE_POLL_H 1

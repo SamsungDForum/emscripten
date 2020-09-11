@@ -529,8 +529,11 @@ const LibraryTizenEmss = {
               'CStructsOffsets.ElementaryMediaPacket.framerateNum',
               'i32') }}};
 
-          if (framerateDen !== 0 && framerateNum !== 0) {
+          if (framerateDen !== 0) {
             config.framerateDen = framerateDen;
+          }
+
+          if (framerateNum !== 0) {
             config.framerateNum = framerateNum;
           }
 
@@ -544,8 +547,11 @@ const LibraryTizenEmss = {
               'CStructsOffsets.ElementaryMediaPacket.width',
               'i32') }}};
 
-          if (height !== 0 && width !== 0) {
+          if (height !== 0) {
             config.height = height;
+          }
+
+          if (width !== 0) {
             config.width = width;
           }
 

@@ -223,20 +223,7 @@ wasm::OperationResult HTMLMediaElement::SetListenerInternal(
     LISTENER_OP(mediaElementSetOnError, handle_, OnErrorListenerCallback,
                 listener);
   } else {
-    LISTENER_OP(mediaElementUnsetOnTimeUpdate, handle_);
-    LISTENER_OP(mediaElementUnsetOnLoadStart, handle_);
-    LISTENER_OP(mediaElementUnsetOnLoadedMetadata, handle_);
-    LISTENER_OP(mediaElementUnsetOnLoadedData, handle_);
-    LISTENER_OP(mediaElementUnsetOnCanPlay, handle_);
-    LISTENER_OP(mediaElementUnsetOnCanPlayThrough, handle_);
-    LISTENER_OP(mediaElementUnsetOnEnded, handle_);
-    LISTENER_OP(mediaElementUnsetOnPlaying, handle_);
-    LISTENER_OP(mediaElementUnsetOnPlay, handle_);
-    LISTENER_OP(mediaElementUnsetOnSeeking, handle_);
-    LISTENER_OP(mediaElementUnsetOnSeeked, handle_);
-    LISTENER_OP(mediaElementUnsetOnPause, handle_);
-    LISTENER_OP(mediaElementUnsetOnWaiting, handle_);
-    LISTENER_OP(mediaElementUnsetOnError, handle_);
+    LISTENER_OP(mediaElementClearListeners, handle_);
   }
   return wasm::OperationResult::kSuccess;
 }

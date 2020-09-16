@@ -427,13 +427,7 @@ OperationResult ElementaryMediaTrack::Impl::SetListenerInternal(
           listener);
     }
   } else {
-    LISTENER_OP(elementaryMediaTrackUnsetOnTrackOpen, handle_);
-    LISTENER_OP(elementaryMediaTrackUnsetOnTrackClosed, handle_);
-    LISTENER_OP(elementaryMediaTrackUnsetOnSeek, handle_);
-
-    if (!version_info_.has_legacy_emss) {
-      LISTENER_OP(elementaryMediaTrackUnsetOnSessionIdChanged, handle_);
-    }
+    LISTENER_OP(elementaryMediaTrackClearListeners, handle_);
   }
   return OperationResult::kSuccess;
 }

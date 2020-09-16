@@ -41,60 +41,53 @@ extern EMSSOperationResult mediaElementPlay(
     void (*finishedCallback)(EMSSOperationResult result, void* userData),
     void* userData);
 extern EMSSOperationResult mediaElementPause(int handle);
+
+extern EMSSOperationResult mediaElementClearListeners(int handle);
+
 extern EMSSOperationResult mediaElementSetOnPlaying(int handle,
                                                     OnEventCallback callback,
                                                     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnPlaying(int handle);
 extern EMSSOperationResult mediaElementSetOnTimeUpdate(int handle,
                                                        OnEventCallback callback,
                                                        void* userData);
-extern EMSSOperationResult mediaElementUnsetOnTimeUpdate(int handle);
 extern EMSSOperationResult mediaElementSetOnLoadStart(int handle,
                                                       OnEventCallback callback,
                                                       void* userData);
-extern EMSSOperationResult mediaElementUnsetOnLoadStart(int handle);
 extern EMSSOperationResult mediaElementSetOnLoadedMetadata(
     int handle,
     OnEventCallback callback,
     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnLoadedMetadata(int handle);
 extern EMSSOperationResult mediaElementSetOnLoadedData(int handle,
                                                        OnEventCallback callback,
                                                        void* userData);
-extern EMSSOperationResult mediaElementUnsetOnLoadedData(int Handle);
 extern EMSSOperationResult mediaElementSetOnCanPlay(int handle,
                                                     OnEventCallback callback,
                                                     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnCanPlay(int handle);
 extern EMSSOperationResult mediaElementSetOnCanPlayThrough(
     int handle,
     OnEventCallback callback,
     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnCanPlayThrough(int handle);
 extern EMSSOperationResult mediaElementSetOnEnded(int handle,
                                                   OnEventCallback callback,
                                                   void* userData);
-extern EMSSOperationResult mediaElementUnsetOnEnded(int handle);
 extern EMSSOperationResult mediaElementSetOnPlay(int handle,
                                                  OnEventCallback callback,
                                                  void* userData);
-extern EMSSOperationResult mediaElementUnsetOnPlay(int handle);
 extern EMSSOperationResult mediaElementSetOnSeeking(int handle,
                                                     OnEventCallback callback,
                                                     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnSeeking(int handle);
 extern EMSSOperationResult mediaElementSetOnSeeked(int handle,
                                                    OnEventCallback callback,
                                                    void* userData);
-extern EMSSOperationResult mediaElementUnsetOnSeeked(int handle);
 extern EMSSOperationResult mediaElementSetOnPause(int handle,
                                                   OnEventCallback callback,
                                                   void* userData);
-extern EMSSOperationResult mediaElementUnsetOnPause(int handle);
 extern EMSSOperationResult mediaElementSetOnWaiting(int handle,
                                                     OnEventCallback callback,
                                                     void* userData);
-extern EMSSOperationResult mediaElementUnsetOnWaiting(int handle);
+extern EMSSOperationResult mediaElementSetOnError(int handle,
+                                                  OnErrorCallback callback,
+                                                  void* userData);
 
 // Fallback for EMSSSetOnPlaybackPositionChanged on legacy product
 extern EMSSOperationResult mediaElementRegisterOnTimeUpdateEMSS(
@@ -106,11 +99,6 @@ extern EMSSOperationResult mediaElementRegisterOnTimeUpdateEMSS(
 extern EMSSOperationResult mediaElementUnregisterOnTimeUpdateEMSS(
     int handle,
     int sourceHandle);
-
-extern EMSSOperationResult mediaElementSetOnError(int handle,
-                                                  OnErrorCallback callback,
-                                                  void* userData);
-extern EMSSOperationResult mediaElementUnsetOnError(int handle);
 
 #ifdef __cplusplus
 }

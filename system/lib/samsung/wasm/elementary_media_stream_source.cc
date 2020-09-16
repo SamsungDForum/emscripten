@@ -251,14 +251,8 @@ OperationResult ElementaryMediaStreamSource::SetListenerInternal(
     if (version_info_.has_legacy_emss) {
       if (html_media_element_)
         html_media_element_->UnregisterOnTimeUpdateEMSS(handle_);
-    } else {
-      LISTENER_OP(EMSSUnsetOnPlaybackPositionChanged, handle_);
     }
-    LISTENER_OP(EMSSUnsetOnSourceDetached, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceClosed, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceOpenPending, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceOpen, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceEnded, handle_);
+    LISTENER_OP(EMSSClearListeners, handle_);
   }
   return OperationResult::kSuccess;
 }

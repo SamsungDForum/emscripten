@@ -75,32 +75,29 @@ extern EMSSOperationResult elementaryMediaTrackRegisterCurrentGraphicsContext(
 extern EMSSOperationResult elementaryMediaTrackSetMediaKey(
     int handle,
     int media_key_handle);
+
+extern EMSSOperationResult elementaryMediaTrackClearListeners(int handle);
+
 extern EMSSOperationResult elementaryMediaTrackSetOnAppendError(
     int handle,
     OnAppendErrorCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnAppendError(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackOpen(
     int handle,
     OnTrackOpenCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackOpen(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackClosed(
     int handle,
     OnTrackClosedCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackClosed(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSeek(
     int handle,
     OnTrackSeekCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnSeek(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSessionIdChanged(
     int handle,
     OnSessionIdChangedCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnSessionIdChanged(
-    int handle);
 
 extern EMSSOperationResult
 elementaryMediaTrackSetListenersForSessionIdEmulation(int handle,

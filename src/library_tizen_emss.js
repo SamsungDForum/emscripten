@@ -606,22 +606,6 @@ const LibraryTizenEmss = {
           obj.addEventListener(eventName, eventHandler);
           return Result.SUCCESS;
         },
-        _unsetListener: function(namespace, handle, eventName) {
-          const obj = namespace.handleMap[handle];
-          if (!obj) {
-            console.warn(
-              `Unset listener ${eventName}: invalid handle = '${handle}'`);
-            return Result.WRONG_HANDLE;
-          }
-          if (!(eventName in namespace.listenerMap[handle])) {
-            return Result.NO_SUCH_LISTENER;
-          }
-          obj.removeEventListener(
-              eventName,
-              namespace.listenerMap[handle][eventName]);
-          delete namespace.listenerMap[handle][eventName];
-          return Result.SUCCESS;
-        },
         _clearListeners: function(namespace, handle) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
@@ -924,10 +908,6 @@ const LibraryTizenEmss = {
           return EmssCommon._setListener(
             WasmHTMLMediaElement, handle, eventName, eventHandler);
         },
-        _unsetListener: function(handle, eventName) {
-          return EmssCommon._unsetListener(
-            WasmHTMLMediaElement, handle, eventName);
-        },
       };
     },
   },
@@ -1208,12 +1188,14 @@ const LibraryTizenEmss = {
       });
   },
 
-  mediaElementUnsetOnError__deps: ['$WasmHTMLMediaElement'],
-  mediaElementUnsetOnError__proxy: 'sync',
-  mediaElementUnsetOnError: function(handle) {
-    return WasmHTMLMediaElement._unsetListener(
-      handle,
-      'error');
+  mediaElementClearListeners__deps: ['$EmssCommon', '$WasmHTMLMediaElement'],
+  mediaElementClearListeners__proxy: 'sync',
+  mediaElementClearListeners: function(handle) {
+    if (!(handle in WasmHTMLMediaElement.handleMap)) {
+      console.error(`No such media element: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+    return EmssCommon._clearListeners(WasmHTMLMediaElement, handle);
   },
 
 /*============================================================================*/
@@ -1346,10 +1328,6 @@ const LibraryTizenEmss = {
         _setListener: function(handle, eventName, eventHandler) {
           return EmssCommon._setListener(
             WasmElementaryMediaStreamSource, handle, eventName, eventHandler);
-        },
-        _unsetListener: function(handle, eventName) {
-          return EmssCommon._unsetListener(
-            WasmElementaryMediaStreamSource, handle, eventName);
         },
       };
     },
@@ -1498,6 +1476,16 @@ const LibraryTizenEmss = {
       WasmElementaryMediaStreamSource._stringToReadyState);
   },
 
+  EMSSClearListeners__deps: ['$EmssCommon', '$WasmElementaryMediaStreamSource'],
+  EMSSClearListeners__proxy: 'sync',
+  EMSSClearListeners: function(handle) {
+    if (!(handle in WasmElementaryMediaStreamSource.handleMap)) {
+      console.error(`No such elementary media stream source: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+    return EmssCommon._clearListeners(WasmElementaryMediaStreamSource, handle);
+  },
+
   EMSSSetOnPlaybackPositionChanged__deps: ['$WasmElementaryMediaStreamSource'],
   EMSSSetOnPlaybackPositionChanged__proxy: 'sync',
   EMSSSetOnPlaybackPositionChanged: function(
@@ -1509,14 +1497,6 @@ const LibraryTizenEmss = {
         {{{ makeDynCall('vfi') }}} (
           eventHandler, event.playbackPosition, userData);
       });
-  },
-
-  EMSSUnsetOnPlaybackPositionChanged__deps: ['$WasmElementaryMediaStreamSource'],
-  EMSSUnsetOnPlaybackPositionChanged__proxy: 'sync',
-  EMSSUnsetOnPlaybackPositionChanged: function(handle) {
-    return WasmElementaryMediaStreamSource._unsetListener(
-      handle,
-      'playbackpositionchanged');
   },
 
   EMSSSetOnClosedCaptions__deps: ['$WasmElementaryMediaStreamSource'],
@@ -1543,14 +1523,6 @@ const LibraryTizenEmss = {
       });
   },
 
-  EMSSUnsetOnClosedCaptions__deps: ['$WasmElementaryMediaStreamSource'],
-  EMSSUnsetOnClosedCaptions__proxy: 'sync',
-  EMSSUnsetOnClosedCaptions: function(handle) {
-    return WasmElementaryMediaStreamSource._unsetListener(
-      handle,
-      'closedcaptions');
-  },
-
   EMSSSetOnSourceOpen__deps: ['$WasmElementaryMediaStreamSource'],
   EMSSSetOnSourceOpen__proxy: 'sync',
   EMSSSetOnSourceOpen: function(handle, eventHandler, userData) {
@@ -1572,14 +1544,6 @@ const LibraryTizenEmss = {
           openForPositionChangeEmulation(event, true);
         }
       });
-  },
-
-  EMSSUnsetOnSourceOpen__deps: ['$WasmElementaryMediaStreamSource'],
-  EMSSUnsetOnSourceOpen__proxy: 'sync',
-  EMSSUnsetOnSourceOpen: function(handle) {
-    return WasmElementaryMediaStreamSource._unsetListener(
-      handle,
-      'sourceopen');
   },
 
 /*============================================================================*/
@@ -1654,10 +1618,6 @@ const LibraryTizenEmss = {
           return (STR_TO_CLOSE_REASON.has(input)
               ? STR_TO_CLOSE_REASON.get(input)
               : CloseReason.UNKNOWN);
-        },
-        _unsetListener: function(handle, eventName) {
-          return EmssCommon._unsetListener(
-            WasmElementaryMediaTrack, handle, eventName);
         },
       };
     },
@@ -1774,7 +1734,6 @@ const LibraryTizenEmss = {
     }
   },
 
-
   elementaryMediaTrackFillTextureWithNextFrame__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackFillTextureWithNextFrame__proxy: 'sync',
   elementaryMediaTrackFillTextureWithNextFrame: function(
@@ -1859,6 +1818,16 @@ const LibraryTizenEmss = {
       handle, 'setMediaKeySession', mediaKeys.mediaKeySession);
   },
 
+  elementaryMediaTrackClearListeners__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
+  elementaryMediaTrackClearListeners__proxy: 'sync',
+  elementaryMediaTrackClearListeners: function(handle) {
+    if (!(handle in WasmElementaryMediaTrack.handleMap)) {
+      console.error(`No such elementary media track: '${handle}'`);
+      return EmssCommon.Result.WRONG_HANDLE;
+    }
+    return EmssCommon._clearListeners(WasmElementaryMediaTrack, handle);
+  },
+
   elementaryMediaTrackSetOnAppendError__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
   elementaryMediaTrackSetOnAppendError__proxy: 'sync',
   elementaryMediaTrackSetOnAppendError: function(
@@ -1871,14 +1840,6 @@ const LibraryTizenEmss = {
         const asyncAppendResult = EmssCommon._exceptionToErrorCode(appendError);
         {{{ makeDynCall('vii') }}} (eventHandler, asyncAppendResult, userData);
       });
-  },
-
-  elementaryMediaTrackUnsetSetOnAppendError__deps: ['$WasmElementaryMediaTrack'],
-  elementaryMediaTrackUnsetSetOnAppendError__proxy: 'sync',
-  elementaryMediaTrackUnsetSetOnAppendError: function(handle) {
-    return WasmElementaryMediaTrack._unsetListener(
-      handle,
-      'appenderror');
   },
 
   elementaryMediaTrackSetOnTrackClosed__deps: ['$WasmElementaryMediaTrack'],
@@ -1906,14 +1867,6 @@ const LibraryTizenEmss = {
       });
   },
 
-  elementaryMediaTrackUnsetOnTrackClosed__deps: ['$WasmElementaryMediaTrack'],
-  elementaryMediaTrackUnsetOnTrackClosed__proxy: 'sync',
-  elementaryMediaTrackUnsetOnTrackClosed: function(handle) {
-    return WasmElementaryMediaTrack._unsetListener(
-      handle,
-      'trackclosed');
-  },
-
   elementaryMediaTrackSetOnSeek__deps: ['$WasmElementaryMediaTrack'],
   elementaryMediaTrackSetOnSeek__proxy: 'sync',
   elementaryMediaTrackSetOnSeek: function(
@@ -1926,14 +1879,6 @@ const LibraryTizenEmss = {
       });
   },
 
-  elementaryMediaTrackUnsetOnSeek__deps: ['$WasmElementaryMediaTrack'],
-  elementaryMediaTrackUnsetOnSeek__proxy: 'sync',
-  elementaryMediaTrackUnsetOnSeek: function(handle) {
-    return WasmElementaryMediaTrack._unsetListener(
-      handle,
-      'seek');
-  },
-
   elementaryMediaTrackSetOnSessionIdChanged__deps: ['$WasmElementaryMediaTrack'],
   elementaryMediaTrackSetOnSessionIdChanged__proxy: 'sync',
   elementaryMediaTrackSetOnSessionIdChanged: function(
@@ -1944,14 +1889,6 @@ const LibraryTizenEmss = {
       (event) => {
         {{{ makeDynCall('vii') }}} (eventHandler, event.sessionId, userData);
       });
-  },
-
-  elementaryMediaTrackUnsetOnSessionIdChanged__deps: ['$WasmElementaryMediaTrack'],
-  elementaryMediaTrackUnsetOnSessionIdChanged__proxy: 'sync',
-  elementaryMediaTrackUnsetOnSessionIdChanged: function(handle) {
-    return WasmElementaryMediaTrack._unsetListener(
-      handle,
-      'sessionidchanged');
   },
 
   elementaryMediaTrackSetListenersForSessionIdEmulation__deps: ['$EmssCommon', '$WasmElementaryMediaTrack'],
@@ -2011,14 +1948,6 @@ const LibraryTizenEmss = {
         `    handle,`,
         `    '${eventName.toLowerCase().slice(2)}',`,
         `    () => dynCall('vi', eventHandler, [userData]));`,
-        `},`,
-        ``,
-        `${objName}Unset${eventName}__deps: ['$${wasmImplName}'],`,
-        `${objName}Unset${eventName}__proxy: 'sync',`,
-        `${objName}Unset${eventName}: function(handle) {`,
-        `  return ${wasmImplName}._unsetListener(`,
-        `    handle,`,
-        `    '${eventName.toLowerCase().slice(2)}');`,
         `},`,
       ].join('\n');
     };

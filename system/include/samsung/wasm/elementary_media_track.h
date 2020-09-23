@@ -328,6 +328,10 @@ class ElementaryMediaTrack final {
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
   /// * Valid only for video track.
+  /// * Regular canvas is not available to worker contexts - when using it,
+  ///   method has to be called on main thread.
+  /// * Offscreen canvas is available to both: window and worker contexts,
+  ///   in such case method can be called on any thread.
   ///
   /// @param texture_id A texture that will be recycled.
   ///
@@ -357,6 +361,10 @@ class ElementaryMediaTrack final {
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
   /// * Valid only for video track.
+  /// * Regular canvas is not available to worker contexts - when using it,
+  ///   method has to be called on main thread.
+  /// * Offscreen canvas is available to both: window and worker contexts,
+  ///   in such case method can be called on any thread.
   ///
   /// @return `Result<void>` with `operation_result` field set to
   /// `OperationResult::kSuccess` on success, otherwise a code describing the

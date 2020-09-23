@@ -1796,6 +1796,12 @@ const LibraryTizenEmss = {
 
   elementaryMediaTrackRegisterCurrentGraphicsContext__deps: ['$EmssCommon', '$GL'],
   elementaryMediaTrackRegisterCurrentGraphicsContext: function(handle) {
+    // Regular canvas is not available to worker contexts. Only offscreen
+    // canvas is available to worker contexts.
+    if (!GL.currentContext) {
+      console.error(`Context is not available on current thread!`);
+      return EmssCommon.Result.NOT_ALLOWED;
+    }
     const webGLContext = GL.currentContext.GLctx;
     try {
       tizentvwasm.SideThreadElementaryMediaTrack.setWebGLRenderingContext(

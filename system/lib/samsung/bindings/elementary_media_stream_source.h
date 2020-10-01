@@ -35,9 +35,13 @@ typedef void (*OnPlaybackPositionChangedCallback)(float newTime,
                                                   void* userData);
 typedef void (*OnOperationDoneCallback)(EMSSOperationResult result,
                                         void* userData);
-typedef void (*OnClosedCaptionsListenerCallback)(const uint8_t* closed_captions,
-                                                 uint32_t captions_length,
-                                                 void* user_data);
+typedef void (*OnClosedCaptionsListenerCallback)(const uint8_t* closedCaptions,
+                                                 uint32_t captionsLength,
+                                                 void* userData);
+
+typedef void (*OnAddTrackDone)(EMSSOperationResult result,
+                               int outTrackHandle,
+                               void* userData);
 
 extern int EMSSCreate(EMSSMode latencyMode);
 extern EMSSOperationResult EMSSRemove(int handle);
@@ -47,10 +51,20 @@ extern EMSSOperationResult EMSSAddAudioTrack(
     int handle,
     const EMSSElementaryAudioTrackConfig* config,
     int* outTrackHandle);
+extern EMSSOperationResult EMSSAddAudioTrackAsync(
+    int handle,
+    const EMSSElementaryAudioTrackConfig* config,
+    OnAddTrackDone finishedCallback,
+    void* userData);
 extern EMSSOperationResult EMSSAddVideoTrack(
     int handle,
     const EMSSElementaryVideoTrackConfig* config,
     int* outTrackHandle);
+extern EMSSOperationResult EMSSAddVideoTrackAsync(
+    int handle,
+    const EMSSElementaryVideoTrackConfig* config,
+    OnAddTrackDone finishedCallback,
+    void* userData);
 extern EMSSOperationResult EMSSRemoveTrack(int handle, int trackHandle);
 extern EMSSOperationResult EMSSFlush(int handle);
 extern EMSSOperationResult EMSSClose(int handle,

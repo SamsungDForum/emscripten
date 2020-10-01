@@ -63,6 +63,13 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
+  enum class ActiveDecodingMode {
+    // Track is using platform hardware decoder
+    kHardware,
+    // Track is using platform software decoder
+    kSoftware
+  };
+
   /// Default constructor, creates an *invalid* `ElementaryMediaTrack` object.
   /// It can be further replaced with a proper one, received with a call to
   /// `ElementaryMediaStreamSource::AddTrack()`.
@@ -282,6 +289,16 @@ class ElementaryMediaTrack final {
   /// @sa `ElementaryMediaTrack::RegisterCurrentGraphicsContext()`
   /// @sa `ElementaryMediaTrack::RecycleTexture()`
   Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
+
+  /// Returns decoder mode used for track.
+  ///
+  /// @return `Result<::ActiveDecodingMode>` with the `operation_result` field
+  /// set to `OperationResult::kSuccess` and a valid `ActiveDecodingMode`
+  /// identifying the active decoding mode, otherwise a code describing an
+  /// error.
+  ///
+  /// @sa `ActiveDecodingMode`
+  Result<ActiveDecodingMode> GetActiveDecodingMode() const;
 
   /// Returns id of the currently active session.
   ///

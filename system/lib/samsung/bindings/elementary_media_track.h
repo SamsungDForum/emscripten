@@ -28,6 +28,11 @@ typedef enum EMSSElementaryMediaTrackCloseReason {
   ElementaryMediaTrackCloseReasonUnknown,
 } EMSSElementaryMediaTrackCloseReason;
 
+typedef enum EMSSElementaryMediaTrackActiveDecodingMode {
+  ElementaryMediaTrackDecodingModeHardware = 0,
+  ElementaryMediaTrackDecodingModeSoftware,
+} EMSSElementaryMediaTrackActiveDecodingMode;
+
 typedef void (*OnTrackOpenCallback)(void* userData);
 typedef void (*OnTrackClosedCallback)(
     EMSSElementaryMediaTrackCloseReason reason,
@@ -64,6 +69,9 @@ extern EMSSOperationResult elementaryMediaTrackFillTextureWithNextFrame(
 extern EMSSOperationResult elementaryMediaTrackFillTextureWithNextFrameSync(
     int handle,
     uint32_t textureId);
+extern EMSSOperationResult elementaryMediaTrackGetActiveDecodingMode(
+    int handle,
+    EMSSElementaryMediaTrackActiveDecodingMode* activeDecodingMode);
 extern EMSSOperationResult elementaryMediaTrackGetSessionId(int handle,
                                                             int32_t* sessionId);
 extern EMSSOperationResult elementaryMediaTrackIsOpen(int handle, bool* isOpen);

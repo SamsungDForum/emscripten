@@ -92,6 +92,8 @@ void OnAppendErrorListenerCallback(EMSSOperationResult append_error,
 namespace samsung {
 namespace wasm {
 
+using ActiveDecodingMode = ElementaryMediaTrack::ActiveDecodingMode;
+
 /*============================================================================*/
 /*= samsung::wasm::ElementaryMediaTrack::Impl declaration                    =*/
 /*============================================================================*/
@@ -119,6 +121,7 @@ class ElementaryMediaTrack::Impl {
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
   Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
+  Result<ActiveDecodingMode> GetActiveDecodingMode() const;
   Result<SessionId> GetSessionId() const;
   Result<bool> IsOpen() const;
   Result<void> RecycleTexture(GLuint textureId);
@@ -300,6 +303,17 @@ Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrameSync(
 
   return CAPICall<void>(elementaryMediaTrackFillTextureWithNextFrameSync,
                         handle_, textureId);
+}
+
+Result<ActiveDecodingMode> ElementaryMediaTrack::Impl::GetActiveDecodingMode()
+    const {
+  if (version_info_.has_decoding_mode) {
+    auto result = CAPICall<EMSSElementaryMediaTrackActiveDecodingMode>(
+        elementaryMediaTrackGetActiveDecodingMode, handle_);
+    return {static_cast<ActiveDecodingMode>(*result),
+            OperationResult::kSuccess};
+  }
+  return {ActiveDecodingMode::kHardware, OperationResult::kSuccess};
 }
 
 Result<SessionId> ElementaryMediaTrack::Impl::GetSessionId() const {
@@ -538,6 +552,12 @@ Result<void> ElementaryMediaTrack::FillTextureWithNextFrameSync(
   if (!pimpl_)
     return {OperationResult::kInvalidObject};
   return pimpl_->FillTextureWithNextFrameSync(texture_id);
+}
+
+Result<ActiveDecodingMode> ElementaryMediaTrack::GetActiveDecodingMode() const {
+  if (!pimpl_)
+    return {ActiveDecodingMode::kHardware, OperationResult::kInvalidObject};
+  return pimpl_->GetActiveDecodingMode();
 }
 
 Result<SessionId> ElementaryMediaTrack::GetSessionId() const {

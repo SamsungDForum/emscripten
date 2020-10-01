@@ -42,6 +42,13 @@ using CAsyncFunctionWithArg =
                             void (*)(CAPIAsyncOperationResult, void*),
                             void*);
 
+template <class CAPIAsyncOperationResult, class Param, class Arg>
+using CAsyncFunctionWithArgAndReturnParam =
+    EMSSOperationResult (*)(int,
+                            Arg,
+                            void (*)(CAPIAsyncOperationResult, Param, void*),
+                            void*);
+
 template <class T, class Arg, void (T::*handler)(Arg)>
 void ListenerCallback(Arg arg, void* userData) {
   (static_cast<T*>(userData)->*handler)(arg);
@@ -80,6 +87,17 @@ auto CAPIAsyncCall(std::function<void(AsyncResult)> cb, Args&&... args) {
                         callback);
 }
 
+template <class AsyncOperationResult,
+          class Param,
+          class CAPIAsyncOperationResult>
+void OnCAPICallFinishedWithParam(CAPIAsyncOperationResult error,
+                                 Param parameter,
+                                 void* userData) {
+  using Callback = std::function<void(AsyncOperationResult, Param)>;
+  auto cb = std::unique_ptr<Callback>(static_cast<Callback*>(userData));
+  (*cb)(static_cast<AsyncOperationResult>(error), parameter);
+}
+
 template <class AsyncOperationResult, class CAPIAsyncOperationResult, class Arg>
 auto CAPIAsyncCallWithArg(
     CAsyncFunctionWithArg<CAPIAsyncOperationResult, Arg> fn,
@@ -91,6 +109,23 @@ auto CAPIAsyncCallWithArg(
       fn, handle, arg,
       OnCAPICallFinished<AsyncOperationResult, CAPIAsyncOperationResult>,
       callback);
+}
+
+template <class AsyncOperationResult,
+          class Param,
+          class CAPIAsyncOperationResult,
+          class Arg>
+auto CAPIAsyncCallWithArgAndReturnParam(
+    CAsyncFunctionWithArgAndReturnParam<CAPIAsyncOperationResult, Param, Arg>
+        fn,
+    int handle,
+    Arg arg,
+    std::function<void(AsyncOperationResult, Param)> cb) {
+  auto callback = new std::function<void(AsyncOperationResult, Param)>(cb);
+  return CAPICall<void>(fn, handle, arg,
+                        OnCAPICallFinishedWithParam<AsyncOperationResult, Param,
+                                                    CAPIAsyncOperationResult>,
+                        callback);
 }
 
 #endif  // LIB_SAMSUNG_BINDINGS_COMMON_H_

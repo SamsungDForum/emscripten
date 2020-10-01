@@ -25,7 +25,24 @@ struct ElementaryVideoTrackConfig final : ElementaryMediaTrackConfig {
                              uint32_t height,
                              uint32_t framerate_num,
                              uint32_t framerate_den)
-      : ElementaryMediaTrackConfig(mime_type, extradata),
+      : ElementaryVideoTrackConfig(std::move(mime_type),
+                                   std::move(extradata),
+                                   DecodingMode::kHardware,
+                                   width,
+                                   height,
+                                   framerate_num,
+                                   framerate_den) {}
+
+  ElementaryVideoTrackConfig(std::string mime_type,
+                             std::vector<uint8_t> extradata,
+                             DecodingMode decoding_mode,
+                             uint32_t width,
+                             uint32_t height,
+                             uint32_t framerate_num,
+                             uint32_t framerate_den)
+      : ElementaryMediaTrackConfig(std::move(mime_type),
+                                   std::move(extradata),
+                                   decoding_mode),
         width(width),
         height(height),
         framerate_num(framerate_num),

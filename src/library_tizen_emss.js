@@ -9,17 +9,18 @@ const LibraryTizenEmss = {
       mimeType: 0,
       extradataSize: 4,
       extradata: 8,
+      decodingMode: 12,
     },
     ElementaryVideoStreamTrackConfig: {
-      width: 12,
-      height: 16,
-      framerateNum: 20,
-      framerateDen: 24,
+      width: 16,
+      height: 20,
+      framerateNum: 24,
+      framerateDen: 28,
     },
     ElementaryAudioStreamTrackConfig: {
-      sampleFormat: 12,
-      channelLayout: 16,
-      samplesPerSecond: 20,
+      sampleFormat: 16,
+      channelLayout: 20,
+      samplesPerSecond: 24,
     },
     ElementaryMediaPacket: {
       pts: 0,
@@ -64,6 +65,8 @@ const LibraryTizenEmss = {
     init: function() {
       // Matches samsung::wasm::kIgnoreSessionId
       const IGNORE_SESSION_ID = -1;
+      const IGNORE_DECODING_MODE = -1;
+      const INVALID_ACTIVE_DECODING_MODE = -1;
 
       // Matches samsung::wasm::OperationResult
       const Result = Object.freeze({
@@ -284,7 +287,25 @@ const LibraryTizenEmss = {
         [ 'UnknownError',                                                     Result.FAILED                        ],
       ]);
 
-      CHANNEL_LAYOUT_TO_STRING = [
+      // Matches samsung::wasm::DecodingMode
+      const DECODING_MODE_TO_STRING = [
+        "hardware",
+        "hardware-with-fallback",
+        "software",
+      ];
+
+      // Matches samsung::wasm::ElementaryMediaTrack::ActiveDecodingMode
+      const ActiveDecodingMode = Object.freeze({
+        HARDWARE: 0,
+        SOFTWARE: 1,
+      });
+
+      const STRING_TO_ACTIVE_DECODING_MODE = new Map([
+        ["hardware", ActiveDecodingMode.HARDWARE],
+        ["software", ActiveDecodingMode.SOFTWARE],
+      ]);
+
+      const CHANNEL_LAYOUT_TO_STRING = [
         "ChannelLayoutNone",
         "ChannelLayoutUnsupported",
         "ChannelLayoutMono",
@@ -373,6 +394,20 @@ const LibraryTizenEmss = {
           setValue(retPtr, obj[property], type);
           return Result.SUCCESS;
         },
+        _getPropertyWithConversion: function(handleMap, handle, property, conversionFunction, retPtr, type) {
+          const obj = handleMap[handle];
+          if (!obj) {
+            console.warn(`property ${property}: invalid handle = '${handle}'`);
+            return Result.WRONG_HANDLE;
+          }
+          const [result, converted] = conversionFunction(obj[property]);
+          if (result != Result.SUCCESS) {
+            return result;
+          }
+
+          setValue(retPtr, converted, type);
+          return Result.SUCCESS;
+        },
         _setProperty: function(handleMap, handle, property, value) {
           const obj = handleMap[handle];
           if (!obj) {
@@ -393,7 +428,7 @@ const LibraryTizenEmss = {
           return new Uint8Array(HEAPU8.slice(ptr, ptr + size));
         },
         _extractBaseConfig: function(configPtr) {
-          return {
+          const config = {
             mimeType: UTF8ToString({{{ makeGetValue(
               'configPtr',
               'CStructsOffsets.ElementaryMediaStreamTrackConfig.mimeType',
@@ -402,6 +437,18 @@ const LibraryTizenEmss = {
               CStructsOffsets.ElementaryMediaStreamTrackConfig.extradata,
               CStructsOffsets.ElementaryMediaStreamTrackConfig.extradataSize),
           };
+
+          const decodingMode = {{{ makeGetValue(
+            'configPtr',
+            'CStructsOffsets.ElementaryMediaStreamTrackConfig.decodingMode',
+            'i32') }}}
+
+          if (decodingMode !== IGNORE_DECODING_MODE) {
+            config.decodingMode =
+              EmssCommon._decodingModeToString(decodingMode);
+          }
+
+          return config;
         },
         _extendConfigTo: function(type, config, configPtr) {
           switch(type) {
@@ -443,6 +490,16 @@ const LibraryTizenEmss = {
             return ERROR_TO_RESULT.get(errorMessage);
           }
           return Result.FAILED;
+        },
+        _decodingModeToString: function(decodingMode) {
+          return EmssCommon._cEnumToString(
+              DECODING_MODE_TO_STRING, decodingMode);
+        },
+        _stringToActiveDecodingMode: function(value) {
+          if (!STRING_TO_ACTIVE_DECODING_MODE.has(value))
+            return [Result.FAILED, INVALID_ACTIVE_DECODING_MODE];
+
+          return [Result.SUCCESS, STRING_TO_ACTIVE_DECODING_MODE.get(value)];
         },
         _sampleFormatToString: function(sampleFormat) {
           return EmssCommon._cEnumToString(
@@ -1296,12 +1353,55 @@ const LibraryTizenEmss = {
 
           return EmssCommon.Result.SUCCESS;
         },
+        _addTrackAsync: function(handle, configPtr, onFinishedCallback, userData, type) {
+          const elementaryMediaStreamSource
+            = WasmElementaryMediaStreamSource.handleMap[handle];
+          if (!elementaryMediaStreamSource) {
+            console.error(`No such elementary media stream source: '${handle}'`);
+            return EmssCommon.Result.WRONG_HANDLE;
+          }
+
+          const config = EmssCommon._extractBaseConfig(configPtr);
+          EmssCommon._extendConfigTo(type, config, configPtr);
+          let track = null;
+
+          try {
+            WasmElementaryMediaStreamSource._getAddTrackAsyncFunction(
+              type, elementaryMediaStreamSource)(config).then((track) => {
+                const trackHandle = track.trackId;
+                WasmElementaryMediaTrack.handleMap[trackHandle] = track;
+                WasmElementaryMediaTrack.listenerMap[trackHandle] = {};
+
+                {{{ makeDynCall('viii') }}} (
+                  onFinishedCallback, EmssCommon._exceptionToErrorCode(null), trackHandle, userData);
+              }).catch((err) => {
+                {{{ makeDynCall('viii') }}} (
+                  onFinishedCallback, EmssCommon._exceptionToErrorCode(err), 0, userData);
+              });
+          } catch (error) {
+            console.error(error.message);
+            return EmssCommon._exceptionToErrorCode(error);
+          }
+
+          return EmssCommon.Result.SUCCESS;
+        },
         _getAddTrackFunction: function(type, elementaryMediaStreamSource) {
           switch(type) {
             case 'video':
               return config => elementaryMediaStreamSource.addVideoTrack(config);
             case 'audio':
               return config => elementaryMediaStreamSource.addAudioTrack(config);
+            default:
+              console.error(`Invalid track type: ${type}`);
+              return;
+          }
+        },
+        _getAddTrackAsyncFunction: function(type, elementaryMediaStreamSource) {
+          switch(type) {
+            case 'video':
+              return config => elementaryMediaStreamSource.addVideoTrackAsync(config);
+            case 'audio':
+              return config => elementaryMediaStreamSource.addAudioTrackAsync(config);
             default:
               console.error(`Invalid track type: ${type}`);
               return;
@@ -1372,7 +1472,7 @@ const LibraryTizenEmss = {
     const elementaryMediaStreamSource
       = WasmElementaryMediaStreamSource.handleMap[handle];
     if (!elementaryMediaStreamSource) {
-      console.error(`No such media element: '${strId}'`);
+      console.error(`No such media element: '${handle}'`);
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -1398,11 +1498,25 @@ const LibraryTizenEmss = {
       handle, configPtr, retPtr, 'audio');
   },
 
+  EMSSAddAudioTrackAsync__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSAddAudioTrackAsync__proxy: 'sync',
+  EMSSAddAudioTrackAsync: function(handle, configPtr, callback, userData) {
+    return WasmElementaryMediaStreamSource._addTrackAsync(
+      handle, configPtr, callback, userData, 'audio');
+  },
+
   EMSSAddVideoTrack__deps: ['$WasmElementaryMediaStreamSource'],
   EMSSAddVideoTrack__proxy: 'sync',
   EMSSAddVideoTrack: function(handle, configPtr, retPtr) {
     return WasmElementaryMediaStreamSource._addTrack(
       handle, configPtr, retPtr, 'video');
+  },
+
+  EMSSAddVideoTrackAsync__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSAddVideoTrackAsync__proxy: 'sync',
+  EMSSAddVideoTrackAsync: function(handle, configPtr, callback, userData) {
+    return WasmElementaryMediaStreamSource._addTrackAsync(
+      handle, configPtr, callback, userData, 'video');
   },
 
   EMSSRemoveTrack__deps: ['$EmssCommon', '$WasmElementaryMediaStreamSource'],
@@ -1606,6 +1720,15 @@ const LibraryTizenEmss = {
             retPtr,
             type);
         },
+        _getPropertyWithConversion: function(handle, property, conversionFunction, retPtr, type) {
+          return EmssCommon._getPropertyWithConversion(
+            WasmElementaryMediaTrack.handleMap,
+            handle,
+            property,
+            conversionFunction,
+            retPtr,
+            type);
+        },
         _setListener: function(handle, eventName, eventHandler) {
           return EmssCommon._setListener(
             WasmElementaryMediaTrack, handle, eventName, eventHandler);
@@ -1760,6 +1883,13 @@ const LibraryTizenEmss = {
       console.error(error.message);
       return EmssCommon._exceptionToErrorCode(error);
     }
+  },
+
+  elementaryMediaTrackGetActiveDecodingMode__deps: ['$WasmElementaryMediaTrack'],
+  elementaryMediaTrackGetActiveDecodingMode__proxy: 'sync',
+  elementaryMediaTrackGetActiveDecodingMode: function(handle, retPtr) {
+    return WasmElementaryMediaTrack._getPropertyWithConversion(
+      handle, 'activeDecodingMode', EmssCommon._stringToActiveDecodingMode, retPtr, 'i32');
   },
 
   elementaryMediaTrackGetSessionId__deps: ['$WasmElementaryMediaTrack'],

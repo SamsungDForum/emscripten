@@ -74,7 +74,22 @@ struct ElementaryAudioTrackConfig final : ElementaryMediaTrackConfig {
                              SampleFormat sample_format,
                              ChannelLayout channel_layout,
                              uint32_t samples_per_second)
-      : ElementaryMediaTrackConfig(mime_type, extradata),
+      : ElementaryAudioTrackConfig(std::move(mime_type),
+                                   std::move(extradata),
+                                   DecodingMode::kHardware,
+                                   sample_format,
+                                   channel_layout,
+                                   samples_per_second) {}
+
+  ElementaryAudioTrackConfig(std::string mime_type,
+                             std::vector<uint8_t> extradata,
+                             DecodingMode decoding_mode,
+                             SampleFormat sample_format,
+                             ChannelLayout channel_layout,
+                             uint32_t samples_per_second)
+      : ElementaryMediaTrackConfig(std::move(mime_type),
+                                   std::move(extradata),
+                                   decoding_mode),
         sample_format(sample_format),
         channel_layout(channel_layout),
         samples_per_second(samples_per_second) {}

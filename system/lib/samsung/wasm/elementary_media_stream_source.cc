@@ -22,19 +22,33 @@ namespace wasm {
 
 namespace {
 
+const EMSSDecodingMode kIgnoreDecodingMode = static_cast<EMSSDecodingMode>(-1);
+
 ::EMSSElementaryAudioTrackConfig ConfigToCAPI(
-    const ElementaryAudioTrackConfig& config) {
+    const ElementaryAudioTrackConfig& config,
+    const EmssVersionInfo& version_info) {
+  EMSSDecodingMode decoding_mode = kIgnoreDecodingMode;
+
+  if (version_info.has_decoding_mode)
+    decoding_mode = static_cast<EMSSDecodingMode>(config.decoding_mode);
+
   return {{config.mime_type.c_str(), config.extradata.size(),
-           config.extradata.data()},
+           config.extradata.data(), decoding_mode},
           static_cast<EMSSSampleFormat>(config.sample_format),
           static_cast<EMSSChannelLayout>(config.channel_layout),
           config.samples_per_second};
 }
 
 ::EMSSElementaryVideoTrackConfig ConfigToCAPI(
-    const ElementaryVideoTrackConfig& config) {
+    const ElementaryVideoTrackConfig& config,
+    const EmssVersionInfo& version_info) {
+  EMSSDecodingMode decoding_mode = kIgnoreDecodingMode;
+
+  if (version_info.has_decoding_mode)
+    decoding_mode = static_cast<EMSSDecodingMode>(config.decoding_mode);
+
   return {{config.mime_type.c_str(), config.extradata.size(),
-           config.extradata.data()},
+           config.extradata.data(), decoding_mode},
           config.width,
           config.height,
           config.framerate_num,
@@ -104,7 +118,7 @@ bool ElementaryMediaStreamSource::IsValid() const {
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config) {
-  auto CAPIConfig = ConfigToCAPI(config);
+  auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
@@ -115,10 +129,33 @@ Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
   return {std::move(track), OperationResult::kSuccess};
 }
 
+Result<void> ElementaryMediaStreamSource::AddTrack(
+    const ElementaryAudioTrackConfig& config,
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  if (!version_info_.has_decoding_mode) {
+    // fallback to synchronous add track in case of missing async add track
+    // functionality on a platform
+    auto result = AddTrack(config);
+    if (result.operation_result != OperationResult::kSuccess)
+      return {result.operation_result};
+
+    on_finished_callback(result.operation_result, std::move(result.value));
+    return {result.operation_result};
+  }
+
+  const auto CAPIConfig = ConfigToCAPI(config, version_info_);
+
+  return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
+                                            EMSSOperationResult>(
+      EMSSAddAudioTrackAsync, handle_, &CAPIConfig,
+      OnAddTrackDone(on_finished_callback));
+}
+
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryVideoTrackConfig& config) {
-  // TODO(p.balut): remove duplciated code
-  auto CAPIConfig = ConfigToCAPI(config);
+  // TODO(p.balut): remove duplicated code
+  auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddVideoTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
@@ -127,6 +164,28 @@ Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
   return {std::move(track), OperationResult::kSuccess};
+}
+
+Result<void> ElementaryMediaStreamSource::AddTrack(
+    const ElementaryVideoTrackConfig& config,
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  if (!version_info_.has_decoding_mode) {
+    // fallback to synchronous add track in case of missing async add track
+    // functionality on a platform
+    auto result = AddTrack(config);
+    if (result.operation_result != OperationResult::kSuccess)
+      return {result.operation_result};
+
+    on_finished_callback(result.operation_result, std::move(result.value));
+    return {result.operation_result};
+  }
+
+  const auto CAPIConfig = ConfigToCAPI(config, version_info_);
+  return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
+                                            EMSSOperationResult>(
+      EMSSAddVideoTrackAsync, handle_, &CAPIConfig,
+      OnAddTrackDone(on_finished_callback));
 }
 
 Result<void> ElementaryMediaStreamSource::RemoveTrack(
@@ -204,6 +263,30 @@ void ElementaryMediaStreamSource::SetHTMLMediaElement(
   }
 
   html_media_element_ = html_media_element;
+}
+
+std::function<void(OperationResult, int32_t handle)>
+ElementaryMediaStreamSource::OnAddTrackDone(
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  auto cb = [this, on_finished_callback](OperationResult result,
+                                         int32_t handle) {
+    if (result != OperationResult::kSuccess) {
+      on_finished_callback(result, ElementaryMediaTrack{});
+      return;
+    }
+
+    auto track =
+        ElementaryMediaTrack{handle, version_info_, use_session_id_emulation_};
+    if (!track.IsValid()) {
+      on_finished_callback(OperationResult::kFailed, ElementaryMediaTrack{});
+      return;
+    }
+
+    on_finished_callback(OperationResult::kSuccess, std::move(track));
+  };
+
+  return cb;
 }
 
 OperationResult ElementaryMediaStreamSource::SetListenerInternal(

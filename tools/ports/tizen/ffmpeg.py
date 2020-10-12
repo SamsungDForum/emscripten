@@ -1831,6 +1831,7 @@ def get(ports, settings, shared):
       ['libswresample/x86', 'resample_init.c'],
       ['libswresample/x86', 'rematrix_init.c'],
       ['fftools', 'ffmpeg_filter.c'],
+      # Remove the below when main is no longer required
       ['fftools', 'ffmpeg_opt.c'],
       ['fftools', 'ffmpeg.c'],
       ['fftools', 'ffmpeg_hw.c'],
@@ -1858,6 +1859,27 @@ def get(ports, settings, shared):
 
     dest_include_path = os.path.join(dest_path, 'ffmpeg')
     shared.safe_ensure_dirs(dest_include_path);
+    export_include_dirs = [
+      [ 'libavcodec' ],
+      [ 'libavcodec', 'arm' ],
+      [ 'libavcodec', 'mips' ],
+      [ 'libavfilter' ],
+      [ 'libavfilter', 'dnn' ],
+      [ 'libavresample' ],
+      [ 'libpostproc' ],
+      [ 'libswscale' ],
+      [ 'libavdevice' ],
+      [ 'libavformat' ],
+      [ 'libavutil' ],
+      [ 'libswresample' ],
+    ]
+    for include_path in export_include_dirs:
+      #Copy headers here
+      export_include_dir = os.path.join('ffmpeg', *include_path)
+      final_export_include_dir = os.path.join(source_path, *include_path)
+      ports.install_headers(final_export_include_dir, target=export_include_dir)
+
+    #remove the below when main is no longer required
     open(os.path.join(dest_include_path, 'ffmpeg.h'), 'w').write(ffmpeg_h)
     ports.install_headers(dest_include_path, target='ffmpeg')
 

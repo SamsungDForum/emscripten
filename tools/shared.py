@@ -546,7 +546,7 @@ def get_emscripten_version(path):
 
 
 EMSCRIPTEN_VERSION = get_emscripten_version(path_from_root('emscripten-version.txt'))
-parts = [int(x) for x in EMSCRIPTEN_VERSION.split('.')]
+parts = [int(x) for x in EMSCRIPTEN_VERSION.split('.')[0:3]]
 EMSCRIPTEN_VERSION_MAJOR, EMSCRIPTEN_VERSION_MINOR, EMSCRIPTEN_VERSION_TINY = parts[0:3]
 # For the Emscripten-specific WASM metadata section, follows semver, changes
 # whenever metadata section changes structure.

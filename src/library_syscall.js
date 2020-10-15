@@ -965,8 +965,26 @@ var SyscallsLibrary = {
                   (writefds ? {{{ makeGetValue('writefds', 4, 'i32') }}} : 0) |
                   (exceptfds ? {{{ makeGetValue('exceptfds', 4, 'i32') }}} : 0);
 
-    timeout = ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_sec, 'i32') }}} * 1000)
-        + ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_usec, 'i32') }}} / 1000);
+    if (timeout == 0) {
+      // timeout is NULL
+      timeout = null;
+    } else {
+      timeout = ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_sec, 'i32') }}} * 1000)
+                + ({{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_usec, 'i32') }}} / 1000);
+    }
+
+#if USE_PTHREADS
+    // To be responsive we execute the loop for `quantum_msecs` and then we
+    // process queued calls. If this call is executed on the main thread without
+    // any proxying, we just continue to run the loop. Otherwise this call is
+    // executed from the `heavy_call_queue` and we simply return.
+    // If we didn't hit timeout, we would execute this call again.
+    // Note: in the first case a problem may arise when during processing calls
+    // we encounter a heavy call, which processing time exceeds this call's
+    // timeout.
+    const quantum_msecs = this.returnEarly ? 5 : 1;
+    let last_processing_time = -1;
+#endif
 
     var check = function(fd, low, high, val) {
       return (fd < 32 ? (low & val) : (high & val));
@@ -1005,9 +1023,22 @@ var SyscallsLibrary = {
       const loop_end_time = new Date();
       const select_time = loop_end_time - start_time;
       const loop_time_2 = (loop_end_time - loop_start_time) / 2;
-      if (select_time + loop_time_2 > timeout) {
+      if (timeout !== null && select_time + loop_time_2 > timeout) {
         break;
       }
+#if USE_PTHREADS
+      if (this.returnEarly && total === 0 &&
+          loop_end_time - start_time > quantum_msecs) {
+        // This is the end for now. We may return here if timeout hasn't
+        // expired.
+        return -{{{ cDefine('EAGAIN') }}};
+      } else if (total === 0 && (last_processing_time === -1 ||
+                 loop_end_time - last_processing_time > quantum_msecs)) {
+        // Just process queued calls.
+        _emscripten_current_thread_process_queued_calls();
+        last_processing_time = loop_end_time;
+      }
+#endif
     }
 
     if (readfds) {
@@ -1022,7 +1053,7 @@ var SyscallsLibrary = {
       {{{ makeSetValue('exceptfds', '0', 'dstExceptLow', 'i32') }}};
       {{{ makeSetValue('exceptfds', '4', 'dstExceptHigh', 'i32') }}};
     }
-    
+
     return total;
   },
   __syscall144: function(which, varargs) { // msync
@@ -1060,6 +1091,13 @@ var SyscallsLibrary = {
   __syscall168: function(which, varargs) { // poll
     const start_time = new Date();
     var fds = SYSCALLS.get(), nfds = SYSCALLS.get(), timeout = SYSCALLS.get();
+
+#if USE_PTHREADS
+    // See comments in `__syscall142` (newselect).
+    const quantum_msecs = this.returnEarly ? 5 : 1;
+    let last_processing_time = -1;
+#endif
+
     var nonzero = 0;
     while (nonzero === 0) {
       const loop_start_time = new Date();
@@ -1083,9 +1121,21 @@ var SyscallsLibrary = {
       const loop_end_time = new Date();
       const poll_time = loop_end_time - start_time;
       const loop_time_2 = (loop_end_time - loop_start_time) / 2;
-      if (poll_time + loop_time_2 > timeout) {
+      if (timeout >= 0 && poll_time + loop_time_2 > timeout) {
         break;
       }
+#if USE_PTHREADS
+      if (this.returnEarly && nonzero === 0 &&
+          loop_end_time - start_time > quantum_msecs) {
+        // This is the end for now. We will return here.
+        return -{{{ cDefine('EAGAIN') }}};
+      } else if (nonzero === 0 && (last_processing_time === -1 ||
+                 loop_end_time - last_processing_time > quantum_msecs)) {
+        // Just process queued calls.
+        _emscripten_current_thread_process_queued_calls();
+        last_processing_time = loop_end_time;
+      }
+#endif
     }
     return nonzero;
   },

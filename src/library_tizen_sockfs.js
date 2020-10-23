@@ -342,9 +342,11 @@ mergeInto(LibraryManager.library, {
         }
       },
       close: function(stream) {
-        var sock = stream.node.sock;
+        const sock = stream.node.sock;
         const fd = stream.fd;
         sock.sock_ops.close(sock);
+        FS.destroyNode(stream.node);
+        FS.closeStream(stream);
         __closeSocketOnRenderThread(fd);
       }
     },
@@ -1254,6 +1256,10 @@ mergeInto(LibraryManager.library, {
   },
   _closeSocketOnRenderThread__proxy: 'sync',
   _closeSocketOnRenderThread: function(fd) {
+    const stream = FS.getStream(fd);
+    if (stream && stream.node) {
+      FS.destroyNode(stream.node);
+    }
     FS.closeStream(fd);
     SOCKFS.clearSocketFdInMap(fd);
   },

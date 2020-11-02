@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <emscripten/threading.h>
 #include <type_traits>
 #include <utility>
 
@@ -291,6 +292,9 @@ Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrame(
   if (!version_info_.has_video_texture)
     return {OperationResult::kNotSupported};
 
+  if (!emscripten_is_main_browser_thread())
+    return {OperationResult::kNotAllowedOnCurrentThread};
+
   return CAPIAsyncCallWithArg<OperationResult, EMSSOperationResult, uint32_t>(
       elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
       finishedCallback);
@@ -300,6 +304,9 @@ Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrameSync(
     GLuint textureId) {
   if (!version_info_.has_video_texture)
     return {OperationResult::kNotSupported};
+
+  if (emscripten_is_main_browser_thread())
+    return {OperationResult::kNotAllowedOnCurrentThread};
 
   return CAPICall<void>(elementaryMediaTrackFillTextureWithNextFrameSync,
                         handle_, textureId);
@@ -345,6 +352,8 @@ Result<void> ElementaryMediaTrack::Impl::RegisterCurrentGraphicsContext() {
 }
 
 Result<void> ElementaryMediaTrack::Impl::SetMediaKey(wasm::MediaKey* key) {
+  if (!key)
+    return {OperationResult::kInvalidArgument};
   return CAPICall<void>(elementaryMediaTrackSetMediaKey, handle_, key->handle_);
 }
 

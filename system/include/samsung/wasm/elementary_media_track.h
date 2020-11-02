@@ -236,6 +236,7 @@ class ElementaryMediaTrack final {
   ///   `EmssVersionInfo::has_video_texture` set to `true`.
   ///
   /// @warning
+  /// * Can be called only on the *main* thread.
   /// * Can only be called in the
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
@@ -256,7 +257,8 @@ class ElementaryMediaTrack final {
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
 
-  /// Fills a provided texture with a decoded video frame synchronously.
+  /// Fills a provided texture with a decoded video frame synchronously. This
+  /// method blocks until texture is available and assigned to `texture_id`.
   ///
   /// The texture should be rendered as soon as possible after it's received.
   ///
@@ -274,10 +276,13 @@ class ElementaryMediaTrack final {
   ///   `EmssVersionInfo::has_video_texture` set to `true`.
   ///
   /// @warning
+  /// * This method may not return instantly if WASM Player's internal decoded
+  ///   frame queue is empty. This method will block until a decoded frame is
+  ///   available and as a blocking method it *cannot* be called on the main
+  ///   thread.
   /// * Can only be called in the
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
-  /// * Blocking method. Cannot be called on main thread.
   /// * Valid only for video tracks.
   ///
   /// @param texture_id A texture that will be filled with video frame.

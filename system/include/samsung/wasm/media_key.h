@@ -72,6 +72,9 @@ class MediaKey final {
  public:
   using SetupFinishedCallback = std::function<void(OperationResult, MediaKey)>;
 
+  /// Default constructor, creates an *invalid* `MediaKey` object. A valid
+  /// `MediaKey` object can be created with `MediaKey::SetupEncryption()`.
+  MediaKey();
   MediaKey(const MediaKey&) = delete;
   MediaKey(MediaKey&& other);
   MediaKey& operator=(const MediaKey&) = delete;

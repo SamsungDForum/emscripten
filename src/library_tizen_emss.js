@@ -363,8 +363,12 @@ const LibraryTizenEmss = {
             return Result.WRONG_HANDLE;
           }
 
-          obj[name](...args);
-
+          try {
+            obj[name](...args);
+          } catch (err) {
+            console.error(err.message);
+            return EmssCommon._exceptionToErrorCode(err);
+          }
           return Result.SUCCESS;
         },
         _callAsyncFunction: function(
@@ -372,17 +376,23 @@ const LibraryTizenEmss = {
             onFinishedCallback, userData, name, ...args) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.warn(`${name}(): invalid handle: '${handle}'`);
+            console.error(`${name}(): invalid handle: '${handle}'`);
             return Result.WRONG_HANDLE;
           }
-          obj[name](...args)
-            .then(() => {
-              {{{ makeDynCall('vii') }}} (
-                onFinishedCallback, getOperationResult(null), userData);
-            }).catch((err) => {
-              {{{ makeDynCall('vii') }}} (
-                onFinishedCallback, getOperationResult(err), userData);
-            });
+          try {
+            obj[name](...args)
+              .then(() => {
+                {{{ makeDynCall('vii') }}} (
+                  onFinishedCallback, getOperationResult(null), userData);
+              }).catch((err) => {
+                console.error(err.message);
+                {{{ makeDynCall('vii') }}} (
+                  onFinishedCallback, getOperationResult(err), userData);
+              });
+          } catch (err) {
+            console.error(err.message);
+            return EmssCommon._exceptionToErrorCode(err);
+          }
           return Result.SUCCESS;
         },
         _getProperty: function(handleMap, handle, property, retPtr, type) {
@@ -391,7 +401,12 @@ const LibraryTizenEmss = {
             console.warn(`property ${property}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
-          setValue(retPtr, obj[property], type);
+          try {
+            setValue(retPtr, obj[property], type);
+          } catch (err) {
+            console.error(err.message);
+            return EmssCommon._exceptionToErrorCode(err);
+          }
           return Result.SUCCESS;
         },
         _getPropertyWithConversion: function(handleMap, handle, property, conversionFunction, retPtr, type) {
@@ -400,12 +415,18 @@ const LibraryTizenEmss = {
             console.warn(`property ${property}: invalid handle = '${handle}'`);
             return Result.WRONG_HANDLE;
           }
-          const [result, converted] = conversionFunction(obj[property]);
-          if (result != Result.SUCCESS) {
-            return result;
+
+          try {
+            const [result, converted] = conversionFunction(obj[property]);
+            if (result != Result.SUCCESS) {
+              return result;
+            }
+            setValue(retPtr, converted, type);
+          } catch (err) {
+            console.error(err.message);
+            return EmssCommon._exceptionToErrorCode(err);
           }
 
-          setValue(retPtr, converted, type);
           return Result.SUCCESS;
         },
         _setProperty: function(handleMap, handle, property, value) {
@@ -1437,9 +1458,23 @@ const LibraryTizenEmss = {
 /*= samsung::wasm::ElementaryMediaStreamSource bindings:                     =*/
 /*============================================================================*/
 
-  EMSSCreate__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSCreate__deps: ['$WasmElementaryMediaStreamSource', '$TIZENTVWASM'],
   EMSSCreate__proxy: 'sync',
   EMSSCreate: function(mode) {
+    if (!TIZENTVWASM.hasTizenTVWasm()) {
+      const abortMsg = 'TizenTV WASM extensions were not found on this device.';
+      console.error(
+          `${abortMsg} TizenTV WASM extensions are available on 2020 Tizen SmartTV devices or newer. Aborting...`);
+      abort(abortMsg);
+    }
+    const emssApiInfo = TIZENTVWASM.getAvailableApis().find((apiInfo) => {
+      return apiInfo.name == 'ElementaryMediaStreamSource';
+    });
+    if (!emssApiInfo) {
+      console.error(
+          `ElementaryMediaStreamSource API is not available on this device.`);
+      return -1;
+    }
     const elementaryMediaStreamSource = new tizentvwasm.ElementaryMediaStreamSource(
       ['normal', 'low-latency', 'video-texture'][mode]);
     const handle = WasmElementaryMediaStreamSource.handleMap.length;
@@ -1473,6 +1508,7 @@ const LibraryTizenEmss = {
       = WasmElementaryMediaStreamSource.handleMap[handle];
     if (!elementaryMediaStreamSource) {
       console.error(`No such media element: '${handle}'`);
+      setValue(retPtr, 0, 'i32');
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -1531,12 +1567,17 @@ const LibraryTizenEmss = {
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
-    WasmElementaryMediaStreamSource.handleMap[handle].removeTrack(
-      WasmElementaryMediaTrack.handleMap[trackHandle]);
-
-    EmssCommon._clearListeners(WasmElementaryMediaTrack, trackHandle);
-    delete WasmElementaryMediaTrack.handleMap[trackHandle];
-    delete WasmElementaryMediaTrack.listenerMap[trackHandle];
+    try {
+      WasmElementaryMediaStreamSource.handleMap[handle].removeTrack(
+          WasmElementaryMediaTrack.handleMap[trackHandle]);
+    } catch (err) {
+      console.error(err.message);
+      return EmssCommon._exceptionToErrorCode(err);
+    } finally {
+      EmssCommon._clearListeners(WasmElementaryMediaTrack, trackHandle);
+      delete WasmElementaryMediaTrack.handleMap[trackHandle];
+      delete WasmElementaryMediaTrack.listenerMap[trackHandle];
+    }
     return EmssCommon.Result.SUCCESS;
   },
 
@@ -1862,13 +1903,8 @@ const LibraryTizenEmss = {
   elementaryMediaTrackFillTextureWithNextFrame: function(
       handle, textureId, onFinished, userData) {
     const webGLTexture = GL.textures[textureId];
-    try {
-      return WasmElementaryMediaTrack._callAsyncFunction(
+    return WasmElementaryMediaTrack._callAsyncFunction(
         handle, onFinished, userData, 'getPicture', webGLTexture);
-    } catch (error) {
-      console.error(error.message);
-      return EmssCommon._exceptionToErrorCode(error);
-    }
   },
 
   elementaryMediaTrackFillTextureWithNextFrameSync__deps: ['$EmssCommon', '$GL'],
@@ -1948,7 +1984,7 @@ const LibraryTizenEmss = {
   elementaryMediaTrackSetMediaKey: function(handle, mediaKeysHandle) {
     const mediaKeys = EmssMediaKey.handleMap[mediaKeysHandle];
     if (!mediaKeys) {
-      return EmssCommon.Result.WRONG_HANDLE;
+      return EmssCommon.Result.INVALID_ARGUMENT;
     }
     return WasmElementaryMediaTrack._callFunction(
       handle, 'setMediaKeySession', mediaKeys.mediaKeySession);

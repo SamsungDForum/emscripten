@@ -39,6 +39,8 @@ struct MediaKey::AsyncImpl {
   }
 };
 
+MediaKey::MediaKey() : handle_(-1) {}
+
 MediaKey::MediaKey(MediaKey&& other)
     : handle_(std::exchange(other.handle_, -1)) {}
 

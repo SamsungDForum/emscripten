@@ -359,14 +359,18 @@ const LibraryTizenEmss = {
         _callFunction: function(handleMap, handle, name, ...args) {
           const obj = handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.error(`${name}(): invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
 
           try {
             obj[name](...args);
           } catch (err) {
+#if TIZEN_EMSS_DEBUG
             console.error(err.message);
+#endif
             return EmssCommon._exceptionToErrorCode(err);
           }
           return Result.SUCCESS;
@@ -376,7 +380,9 @@ const LibraryTizenEmss = {
             onFinishedCallback, userData, name, ...args) {
           const obj = handleMap[handle];
           if (!obj) {
-            console.error(`${name}(): invalid handle: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+            console.warn(`${name}(): invalid handle: '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
           try {
@@ -385,12 +391,16 @@ const LibraryTizenEmss = {
                 {{{ makeDynCall('vii') }}} (
                   onFinishedCallback, getOperationResult(null), userData);
               }).catch((err) => {
+#if TIZEN_EMSS_DEBUG
                 console.error(err.message);
+#endif
                 {{{ makeDynCall('vii') }}} (
                   onFinishedCallback, getOperationResult(err), userData);
               });
           } catch (err) {
+#if TIZEN_EMSS_DEBUG
             console.error(err.message);
+#endif
             return EmssCommon._exceptionToErrorCode(err);
           }
           return Result.SUCCESS;
@@ -398,13 +408,17 @@ const LibraryTizenEmss = {
         _getProperty: function(handleMap, handle, property, retPtr, type) {
           const obj = handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.warn(`property ${property}: invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
           try {
             setValue(retPtr, obj[property], type);
           } catch (err) {
+#if TIZEN_EMSS_DEBUG
             console.error(err.message);
+#endif
             return EmssCommon._exceptionToErrorCode(err);
           }
           return Result.SUCCESS;
@@ -412,7 +426,9 @@ const LibraryTizenEmss = {
         _getPropertyWithConversion: function(handleMap, handle, property, conversionFunction, retPtr, type) {
           const obj = handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.warn(`property ${property}: invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
 
@@ -423,7 +439,9 @@ const LibraryTizenEmss = {
             }
             setValue(retPtr, converted, type);
           } catch (err) {
+#if TIZEN_EMSS_DEBUG
             console.error(err.message);
+#endif
             return EmssCommon._exceptionToErrorCode(err);
           }
 
@@ -432,13 +450,17 @@ const LibraryTizenEmss = {
         _setProperty: function(handleMap, handle, property, value) {
           const obj = handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.warn(`property ${property}: invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
           try {
             obj[property] = value;
           } catch (error) {
+#if TIZEN_EMSS_DEBUG
             console.error(error.message);
+#endif
             return EmssCommon._exceptionToErrorCode(error);
           }
           return Result.SUCCESS;
@@ -480,7 +502,9 @@ const LibraryTizenEmss = {
               EmssCommon._extendConfigToVideo(config, configPtr);
               break;
             default:
+#if TIZEN_EMSS_DEBUG
               console.error(`Invalid type: ${type}`);
+#endif
           }
         },
         _cEnumToString: function(stringArray, value, defaultValueIndex = 0) {
@@ -672,12 +696,16 @@ const LibraryTizenEmss = {
         _setListener: function(namespace, handle, eventName, eventHandler) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.warn(
                 `Set listener ${eventName}: invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
           if (eventName in namespace.listenerMap[handle]) {
+#if TIZEN_EMSS_DEBUG
             console.warn(`Listener already set: '${eventName}'`);
+#endif
             return Result.LISTENER_ALREADY_SET;
           }
           namespace.listenerMap[handle][eventName] = eventHandler;
@@ -687,7 +715,9 @@ const LibraryTizenEmss = {
         _clearListeners: function(namespace, handle) {
           const obj = namespace.handleMap[handle];
           if (!obj) {
+#if TIZEN_EMSS_DEBUG
             console.warn(`clear listeners: invalid handle = '${handle}'`);
+#endif
             return Result.WRONG_HANDLE;
           }
           const listeners = namespace.listenerMap[handle];
@@ -882,7 +912,9 @@ const LibraryTizenEmss = {
       return event.target.update(license)
         .then(() => { resolve(); },
               (error) => {
+#if TIZEN_EMSS_DEBUG
             console.error(`Failed to update the session: ${error}`);
+#endif
             reject(error);
         });
     },
@@ -899,7 +931,9 @@ const LibraryTizenEmss = {
     try {
       config = EmssMediaKey._makeDRMConfigFromPtr(configPtr);
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
     EmssMediaKey._setupMediaKey(config).then(
@@ -915,7 +949,9 @@ const LibraryTizenEmss = {
           id,
           userData);
       }).catch((error) => {
+#if TIZEN_EMSS_DEBUG
         console.error(error.message);
+#endif
         const errorCode = EmssCommon._exceptionToErrorCode(error);
         {{{ makeDynCall('viii') }}} (onFinished, errorCode, -1, userData);
       });
@@ -927,18 +963,24 @@ const LibraryTizenEmss = {
   mediaKeyRemove: function(handle) {
     const obj = EmssMediaKey.handleMap[handle];
     if (!obj) {
-      console.error(`remove media key: invalid handle = '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.error(`Remove media key: invalid handle = '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
     try {
       obj.mediaKeySession.close().catch((exception) => {
-        console.error(`failed to close media key session:` +
+#if TIZEN_EMSS_DEBUG
+        console.error(`Failed to close media key session:` +
                       `'${exception.message}'`);
+#endif
       });
     } catch (exception) {
-      console.error(`failed to close media key session:` +
+#if TIZEN_EMSS_DEBUG
+      console.error(`Failed to close media key session:` +
                     `'${exception.message}'`);
+#endif
       return EmssCommon.Result.FAILED;
     }
 
@@ -1000,7 +1042,9 @@ const LibraryTizenEmss = {
     const strId = UTF8ToString(id);
     const mediaElement = document.getElementById(strId);
     if (!mediaElement) {
-      console.error(`No such media element: '${strId}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such media element: '${strId}'`);
+#endif
       return -1;
     }
     const handle = WasmHTMLMediaElement.handleMap.length;
@@ -1013,7 +1057,9 @@ const LibraryTizenEmss = {
   mediaElementRemove__proxy: 'sync',
   mediaElementRemove: function(handle) {
     if (!(handle in WasmHTMLMediaElement.handleMap)) {
-      console.error(`No such media element: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     WasmHTMLMediaElement.handleMap[handle].src = '';
@@ -1098,7 +1144,9 @@ const LibraryTizenEmss = {
   mediaElementGetSrc: function(handle, retPtr) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -1116,13 +1164,17 @@ const LibraryTizenEmss = {
   mediaElementSetSrc: function(handle, newSrc) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     try {
       mediaElement.src = UTF8ToString(newSrc);
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
     return EmssCommon.Result.SUCCESS;
@@ -1133,18 +1185,24 @@ const LibraryTizenEmss = {
   mediaElementRegisterOnTimeUpdateEMSS: function(handle, sourceHandle, eventHandler, listener) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
     const source = WasmElementaryMediaStreamSource.handleMap[sourceHandle];
     if (!source) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such Source: '${sourceHandle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
     if (mediaElement.emssTimeUpdateListener) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`Listener already set for media element: '${handle}'`);
+#endif
       return EmssCommon.Result.LISTENER_ALREADY_SET;
     }
 
@@ -1197,12 +1255,16 @@ const LibraryTizenEmss = {
   mediaElementUnregisterOnTimeUpdateEMSS: function(handle, sourceHandle) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
     if (!mediaElement.emssTimeUpdateListener) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`Listener not registered for media element: '${handle}'`);
+#endif
       return EmssCommon.Result.NO_SUCH_LISTENER;
     }
 
@@ -1212,7 +1274,9 @@ const LibraryTizenEmss = {
 
     const source = WasmElementaryMediaStreamSource.handleMap[sourceHandle];
     if (!source) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such Source: '${sourceHandle}'`);
+#endif
     } else {
       mediaElement.removeEventListener('sourceopen',
           source.emssOpenForPositionChangeEmulation);
@@ -1234,7 +1298,9 @@ const LibraryTizenEmss = {
   mediaElementPause: function(handle) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     mediaElement.pause();
@@ -1247,7 +1313,9 @@ const LibraryTizenEmss = {
       handle, eventHandler, userData) {
     const mediaElement = WasmHTMLMediaElement.handleMap[handle];
     if (!mediaElement) {
+#if TIZEN_EMSS_DEBUG
       console.warn(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     return WasmHTMLMediaElement._setListener(
@@ -1270,7 +1338,9 @@ const LibraryTizenEmss = {
   mediaElementClearListeners__proxy: 'sync',
   mediaElementClearListeners: function(handle) {
     if (!(handle in WasmHTMLMediaElement.handleMap)) {
+#if TIZEN_EMSS_DEBUG
       console.error(`No such media element: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     return EmssCommon._clearListeners(WasmHTMLMediaElement, handle);
@@ -1353,7 +1423,9 @@ const LibraryTizenEmss = {
           const elementaryMediaStreamSource
             = WasmElementaryMediaStreamSource.handleMap[handle];
           if (!elementaryMediaStreamSource) {
-            console.error(`No such elementary media stream source: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+            console.warn(`No such elementary media stream source: '${handle}'`);
+#endif
             return EmssCommon.Result.WRONG_HANDLE;
           }
 
@@ -1364,7 +1436,9 @@ const LibraryTizenEmss = {
             track = WasmElementaryMediaStreamSource._getAddTrackFunction(
               type, elementaryMediaStreamSource)(config);
           } catch (error) {
+#if TIZEN_EMSS_DEBUG
             console.error(error.message);
+#endif
             return EmssCommon._exceptionToErrorCode(error);
           }
           const trackHandle = track.trackId;
@@ -1378,7 +1452,9 @@ const LibraryTizenEmss = {
           const elementaryMediaStreamSource
             = WasmElementaryMediaStreamSource.handleMap[handle];
           if (!elementaryMediaStreamSource) {
-            console.error(`No such elementary media stream source: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+            console.warn(`No such elementary media stream source: '${handle}'`);
+#endif
             return EmssCommon.Result.WRONG_HANDLE;
           }
 
@@ -1400,7 +1476,9 @@ const LibraryTizenEmss = {
                   onFinishedCallback, EmssCommon._exceptionToErrorCode(err), 0, userData);
               });
           } catch (error) {
+#if TIZEN_EMSS_DEBUG
             console.error(error.message);
+#endif
             return EmssCommon._exceptionToErrorCode(error);
           }
 
@@ -1413,7 +1491,9 @@ const LibraryTizenEmss = {
             case 'audio':
               return config => elementaryMediaStreamSource.addAudioTrack(config);
             default:
+#if TIZEN_EMSS_DEBUG
               console.error(`Invalid track type: ${type}`);
+#endif
               return;
           }
         },
@@ -1424,7 +1504,9 @@ const LibraryTizenEmss = {
             case 'audio':
               return config => elementaryMediaStreamSource.addAudioTrackAsync(config);
             default:
+#if TIZEN_EMSS_DEBUG
               console.error(`Invalid track type: ${type}`);
+#endif
               return;
           }
         },
@@ -1432,7 +1514,9 @@ const LibraryTizenEmss = {
           const elementaryMediaStreamSource
             = WasmElementaryMediaStreamSource.handleMap[handle];
           if (!elementaryMediaStreamSource) {
-            console.error(`No such elementary media stream source: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+            console.warn(`No such elementary media stream source: '${handle}'`);
+#endif
             return EmssCommon.Result.WRONG_HANDLE;
           }
           const answer = transform(elementaryMediaStreamSource[property]);
@@ -1475,6 +1559,12 @@ const LibraryTizenEmss = {
           `ElementaryMediaStreamSource API is not available on this device.`);
       return -1;
     }
+#if TIZEN_EMSS_DEBUG
+    else {
+      console.info(
+          `Creating ElementaryMediaStreamSource, version: ${emssApiInfo.version}`);
+    }
+#endif
     const elementaryMediaStreamSource = new tizentvwasm.ElementaryMediaStreamSource(
       ['normal', 'low-latency', 'video-texture'][mode]);
     const handle = WasmElementaryMediaStreamSource.handleMap.length;
@@ -1488,7 +1578,9 @@ const LibraryTizenEmss = {
   EMSSRemove__proxy: 'sync',
   EMSSRemove: function(handle) {
     if (!(handle in WasmElementaryMediaStreamSource.handleMap)) {
-      console.error(`No such elementary media stream source: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such elementary media stream source: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     const source = WasmElementaryMediaStreamSource.handleMap[handle];
@@ -1507,7 +1599,7 @@ const LibraryTizenEmss = {
     const elementaryMediaStreamSource
       = WasmElementaryMediaStreamSource.handleMap[handle];
     if (!elementaryMediaStreamSource) {
-      console.error(`No such media element: '${handle}'`);
+      console.warn(`No such media element: '${handle}'`);
       setValue(retPtr, 0, 'i32');
       return EmssCommon.Result.WRONG_HANDLE;
     }
@@ -1559,11 +1651,15 @@ const LibraryTizenEmss = {
   EMSSRemoveTrack__proxy: 'sync',
   EMSSRemoveTrack: function(handle, trackHandle) {
     if (!(handle in WasmElementaryMediaStreamSource.handleMap)) {
-      console.error(`No such ElementaryMediaStreamSource: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such ElementaryMediaStreamSource: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     if (!(trackHandle in WasmElementaryMediaTrack.handleMap)) {
-      console.error(`No such ElementaryMediaTrack: '${trackHandle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such ElementaryMediaTrack: '${trackHandle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
 
@@ -1571,7 +1667,9 @@ const LibraryTizenEmss = {
       WasmElementaryMediaStreamSource.handleMap[handle].removeTrack(
           WasmElementaryMediaTrack.handleMap[trackHandle]);
     } catch (err) {
+#if TIZEN_EMSS_DEBUG
       console.error(err.message);
+#endif
       return EmssCommon._exceptionToErrorCode(err);
     } finally {
       EmssCommon._clearListeners(WasmElementaryMediaTrack, trackHandle);
@@ -1635,7 +1733,9 @@ const LibraryTizenEmss = {
   EMSSClearListeners__proxy: 'sync',
   EMSSClearListeners: function(handle) {
     if (!(handle in WasmElementaryMediaStreamSource.handleMap)) {
-      console.error(`No such elementary media stream source: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such elementary media stream source: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     return EmssCommon._clearListeners(WasmElementaryMediaStreamSource, handle);
@@ -1671,7 +1771,9 @@ const LibraryTizenEmss = {
           {{{ makeDynCall('viii') }}} (
             eventHandler, captionsPtr, captionsLength, userData);
         } catch (error) {
+#if TIZEN_EMSS_DEBUG
           console.error(error.message);
+#endif
         } finally {
           _free(captionsPtr);
         }
@@ -1795,7 +1897,9 @@ const LibraryTizenEmss = {
   elementaryMediaTrackRemove__proxy: 'sync',
   elementaryMediaTrackRemove: function(handle) {
     if (!(handle in WasmElementaryMediaTrack.handleMap)) {
-      console.error(`No such elementary media track: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such elementary media track: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     EmssCommon._clearListeners(WasmElementaryMediaTrack, handle);
@@ -1814,7 +1918,9 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1829,7 +1935,9 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1845,7 +1953,9 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1861,7 +1971,9 @@ const LibraryTizenEmss = {
             handle, packet, data);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1877,7 +1989,9 @@ const LibraryTizenEmss = {
       }
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1893,7 +2007,9 @@ const LibraryTizenEmss = {
       }
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1916,7 +2032,9 @@ const LibraryTizenEmss = {
           handle, webGLTexture);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1955,7 +2073,9 @@ const LibraryTizenEmss = {
           handle, videoPicture);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1965,7 +2085,9 @@ const LibraryTizenEmss = {
     // Regular canvas is not available to worker contexts. Only offscreen
     // canvas is available to worker contexts.
     if (!GL.currentContext) {
+#if TIZEN_EMSS_DEBUG
       console.error(`Context is not available on current thread!`);
+#endif
       return EmssCommon.Result.NOT_ALLOWED;
     }
     const webGLContext = GL.currentContext.GLctx;
@@ -1974,7 +2096,9 @@ const LibraryTizenEmss = {
           handle, webGLContext);
       return EmssCommon.Result.SUCCESS;
     } catch (error) {
+#if TIZEN_EMSS_DEBUG
       console.error(error.message);
+#endif
       return EmssCommon._exceptionToErrorCode(error);
     }
   },
@@ -1994,7 +2118,9 @@ const LibraryTizenEmss = {
   elementaryMediaTrackClearListeners__proxy: 'sync',
   elementaryMediaTrackClearListeners: function(handle) {
     if (!(handle in WasmElementaryMediaTrack.handleMap)) {
-      console.error(`No such elementary media track: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such elementary media track: '${handle}'`);
+#endif
       return EmssCommon.Result.WRONG_HANDLE;
     }
     return EmssCommon._clearListeners(WasmElementaryMediaTrack, handle);
@@ -2067,8 +2193,10 @@ const LibraryTizenEmss = {
   elementaryMediaTrackSetListenersForSessionIdEmulation__proxy: 'sync',
   elementaryMediaTrackSetListenersForSessionIdEmulation: function(
       handle, closedHandler, userData) {
+#if TIZEN_EMSS_DEBUG
     console.info(
         `session_id will be emulated for track ${handle}, for object: ${userData}`);
+#endif
 
     const onClosed = (event, runningFromDefaultHandler) => {
       if (!runningFromDefaultHandler &&
@@ -2089,7 +2217,9 @@ const LibraryTizenEmss = {
           'trackclosed_sid_emulation'] = onClosed;
       obj.addEventListener('trackclosed', onClosed);
     } else {
-      console.warn(`No such Track: '${handle}'`);
+#if TIZEN_EMSS_DEBUG
+      console.warn(`No such elementary media track: '${handle}'`);
+#endif
     }
     return EmssCommon.Result.SUCCESS;
   },

@@ -118,12 +118,13 @@ bool ElementaryMediaStreamSource::IsValid() const {
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config) {
+  using TrackType = ElementaryMediaTrack::TrackType;
   auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
-  auto track = ElementaryMediaTrack{result.value, version_info_,
-                                    use_session_id_emulation_};
+  auto track = ElementaryMediaTrack{result.value, TrackType::kAudio,
+                                    version_info_, use_session_id_emulation_};
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
   return {std::move(track), OperationResult::kSuccess};
@@ -133,6 +134,7 @@ Result<void> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config,
     std::function<void(OperationResult, ElementaryMediaTrack)>
         on_finished_callback) {
+  using TrackType = ElementaryMediaTrack::TrackType;
   if (!version_info_.has_decoding_mode) {
     // fallback to synchronous add track in case of missing async add track
     // functionality on a platform
@@ -149,18 +151,19 @@ Result<void> ElementaryMediaStreamSource::AddTrack(
   return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
                                             EMSSOperationResult>(
       EMSSAddAudioTrackAsync, handle_, &CAPIConfig,
-      OnAddTrackDone(on_finished_callback));
+      GetOnAddTrackDoneCb(TrackType::kAudio, on_finished_callback));
 }
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryVideoTrackConfig& config) {
+  using TrackType = ElementaryMediaTrack::TrackType;
   // TODO(p.balut): remove duplicated code
   auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddVideoTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
-  auto track = ElementaryMediaTrack{result.value, version_info_,
-                                    use_session_id_emulation_};
+  auto track = ElementaryMediaTrack{result.value, TrackType::kVideo,
+                                    version_info_, use_session_id_emulation_};
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
   return {std::move(track), OperationResult::kSuccess};
@@ -170,6 +173,7 @@ Result<void> ElementaryMediaStreamSource::AddTrack(
     const ElementaryVideoTrackConfig& config,
     std::function<void(OperationResult, ElementaryMediaTrack)>
         on_finished_callback) {
+  using TrackType = ElementaryMediaTrack::TrackType;
   if (!version_info_.has_decoding_mode) {
     // fallback to synchronous add track in case of missing async add track
     // functionality on a platform
@@ -185,7 +189,7 @@ Result<void> ElementaryMediaStreamSource::AddTrack(
   return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
                                             EMSSOperationResult>(
       EMSSAddVideoTrackAsync, handle_, &CAPIConfig,
-      OnAddTrackDone(on_finished_callback));
+      GetOnAddTrackDoneCb(TrackType::kVideo, on_finished_callback));
 }
 
 Result<void> ElementaryMediaStreamSource::RemoveTrack(
@@ -266,18 +270,19 @@ void ElementaryMediaStreamSource::SetHTMLMediaElement(
 }
 
 std::function<void(OperationResult, int32_t handle)>
-ElementaryMediaStreamSource::OnAddTrackDone(
+ElementaryMediaStreamSource::GetOnAddTrackDoneCb(
+    ElementaryMediaTrack::TrackType type,
     std::function<void(OperationResult, ElementaryMediaTrack)>
         on_finished_callback) {
-  auto cb = [this, on_finished_callback](OperationResult result,
-                                         int32_t handle) {
+  auto cb = [this, on_finished_callback, type](OperationResult result,
+                                               int32_t handle) {
     if (result != OperationResult::kSuccess) {
       on_finished_callback(result, ElementaryMediaTrack{});
       return;
     }
 
-    auto track =
-        ElementaryMediaTrack{handle, version_info_, use_session_id_emulation_};
+    auto track = ElementaryMediaTrack{handle, type, version_info_,
+                                      use_session_id_emulation_};
     if (!track.IsValid()) {
       on_finished_callback(OperationResult::kFailed, ElementaryMediaTrack{});
       return;

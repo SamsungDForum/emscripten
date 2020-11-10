@@ -63,11 +63,25 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
+  /// Enumerates possible data decoding modes. Can be obtained by
+  /// `GetActiveDecodingMode()` to check what decoding mode is selected for a
+  /// particular track.
   enum class ActiveDecodingMode {
-    // Track is using platform hardware decoder
+    /// Track is using platform hardware decoder.
     kHardware,
-    // Track is using platform software decoder
+    /// Track is using platform software decoder.
     kSoftware
+  };
+
+  /// Enumerates track types. Can be obtained by `GetType()`.
+  enum class TrackType {
+    /// This is an audio track.
+    kAudio,
+    /// This is a video track.
+    kVideo,
+    /// Unknown track type, usually a result of track being invalid (i.e.
+    /// `IsValid()` is `false`).
+    kUnknown,
   };
 
   /// Default constructor, creates an *invalid* `ElementaryMediaTrack` object.
@@ -87,6 +101,9 @@ class ElementaryMediaTrack final {
   ///
   /// @return `true` if track instance is valid, otherwise `false`.
   bool IsValid() const;
+
+  /// Returns a `TrackType` of this track.
+  TrackType GetType() const;
 
   /// Appends a given `ElementaryMediaPacket` to the track.
   ///
@@ -431,6 +448,7 @@ class ElementaryMediaTrack final {
   class Impl;
 
   explicit ElementaryMediaTrack(int handle,
+                                TrackType type,
                                 EmssVersionInfo version_info,
                                 bool use_session_id_emulation);
 

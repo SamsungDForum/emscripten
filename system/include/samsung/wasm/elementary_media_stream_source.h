@@ -478,7 +478,8 @@ class ElementaryMediaStreamSource final {
   const char* GetURL() const;
 
  private:
-  std::function<void(OperationResult, int32_t handle)> OnAddTrackDone(
+  std::function<void(OperationResult, int32_t handle)> GetOnAddTrackDoneCb(
+      ElementaryMediaTrack::TrackType type,
       std::function<void(OperationResult, ElementaryMediaTrack)>
           on_finished_callback);
   void SetHTMLMediaElement(html::HTMLMediaElement*);

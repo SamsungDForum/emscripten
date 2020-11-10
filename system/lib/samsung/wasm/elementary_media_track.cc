@@ -5,9 +5,9 @@
 
 #include "samsung/wasm/elementary_media_track.h"
 
+#include <emscripten/threading.h>
 #include <atomic>
 #include <chrono>
-#include <emscripten/threading.h>
 #include <type_traits>
 #include <utility>
 
@@ -24,18 +24,29 @@
 
 namespace {
 
+using TrackType = samsung::wasm::ElementaryMediaTrack::TrackType;
+
 ::EMSSElementaryMediaPacket PacketToCAPI(
-    const samsung::wasm::ElementaryMediaPacket& packet) {
-  return {
+    const samsung::wasm::ElementaryMediaPacket& packet,
+    TrackType type) {
+  auto result = ::EMSSElementaryMediaPacket{
       packet.pts.count(),   packet.dts.count(), packet.duration.count(),
       packet.is_key_frame,  packet.data_size,   packet.data,
       packet.width,         packet.height,      packet.framerate_num,
       packet.framerate_den, packet.session_id,
   };
+  if (type == TrackType::kAudio) {
+    result.framerate_num = 0;
+    result.framerate_den = 0;
+    result.width = 0;
+    result.height = 0;
+  }
+  return result;
 }
 
 ::EMSSEncryptedElementaryMediaPacket PacketToCAPI(
-    const samsung::wasm::EncryptedElementaryMediaPacket& packet) {
+    const samsung::wasm::EncryptedElementaryMediaPacket& packet,
+    TrackType type) {
   // TODO(p.balut): A common structure should be used instead of a cast.
   static_assert(
       sizeof(EMSSEncryptedSubsampleDescription) ==
@@ -50,9 +61,9 @@ namespace {
           offsetof(samsung::wasm::EncryptedSubsampleDescription, cipher_block),
       "C++ API subsample description != JS bindings subsample description.");
 
-  EMSSElementaryMediaPacket base_packet = PacketToCAPI(
-      static_cast<const samsung::wasm::ElementaryMediaPacket&>(packet));
-  return {base_packet,
+  return {PacketToCAPI(
+              static_cast<const samsung::wasm::ElementaryMediaPacket&>(packet),
+              type),
           packet.subsamples.size(),
           reinterpret_cast<const EMSSEncryptedSubsampleDescription*>(
               packet.subsamples.data()),
@@ -102,6 +113,7 @@ using ActiveDecodingMode = ElementaryMediaTrack::ActiveDecodingMode;
 class ElementaryMediaTrack::Impl {
  public:
   explicit Impl(int handle,
+                TrackType type,
                 EmssVersionInfo version_info,
                 bool use_session_id_emulation);
   Impl(const Impl&) = delete;
@@ -111,6 +123,7 @@ class ElementaryMediaTrack::Impl {
   ~Impl();
 
   bool IsValid() const;
+  TrackType GetType() const;
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
   Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
@@ -151,6 +164,7 @@ class ElementaryMediaTrack::Impl {
 
   int handle_;
   ElementaryMediaTrackListener* listener_;
+  ElementaryMediaTrack::TrackType type_;
   EmssVersionInfo version_info_;
 
   // session id emulation for legacy mode: variables
@@ -163,10 +177,12 @@ class ElementaryMediaTrack::Impl {
 /*============================================================================*/
 
 ElementaryMediaTrack::Impl::Impl(int handle,
+                                 TrackType type,
                                  EmssVersionInfo version_info,
                                  bool use_session_id_emulation)
     : handle_(handle),
       listener_(nullptr),
+      type_(type),
       version_info_(version_info),
       emulated_session_id_(0),
       use_session_id_emulation_(use_session_id_emulation) {
@@ -186,6 +202,12 @@ ElementaryMediaTrack::Impl::~Impl() {
 
 bool ElementaryMediaTrack::Impl::IsValid() const {
   return IsHandleValid(handle_);
+}
+
+ElementaryMediaTrack::TrackType ElementaryMediaTrack::Impl::GetType() const {
+  if (!IsHandleValid(handle_))
+    return TrackType::kUnknown;
+  return type_;
 }
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacket(
@@ -380,7 +402,7 @@ Result<void> ElementaryMediaTrack::Impl::SetListener(
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
     const ElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -392,7 +414,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacketAsyncInternal(
     const ElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -404,7 +426,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacketAsyncInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
     const EncryptedElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -417,7 +439,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketAsyncInternal(
     const EncryptedElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -488,9 +510,11 @@ void ElementaryMediaTrack::Impl::UnregisterSessionIdEmulationCallbacks() {
 ElementaryMediaTrack::ElementaryMediaTrack() = default;
 
 ElementaryMediaTrack::ElementaryMediaTrack(int handle,
+                                           TrackType type,
                                            EmssVersionInfo version_info,
                                            bool use_session_id_emulation)
     : pimpl_(std::make_unique<Impl>(handle,
+                                    type,
                                     version_info,
                                     use_session_id_emulation)) {}
 
@@ -505,6 +529,12 @@ bool ElementaryMediaTrack::IsValid() const {
   if (!pimpl_)
     return false;
   return pimpl_->IsValid();
+}
+
+ElementaryMediaTrack::TrackType ElementaryMediaTrack::GetType() const {
+  if (!pimpl_)
+    return TrackType::kUnknown;
+  return pimpl_->GetType();
 }
 
 Result<void> ElementaryMediaTrack::AppendPacket(

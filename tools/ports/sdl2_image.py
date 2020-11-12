@@ -23,7 +23,7 @@ def get(ports, settings, shared):
   libname = 'libSDL2_image'
   if formats != '':
     libname += '_' + formats
-  libname = ports.get_lib_name(libname)
+  libname = ports.get_lib_name(libname + ('-mt' if settings.USE_PTHREADS else ''))
 
   def create():
     src_dir = os.path.join(ports.get_dir(), 'sdl2_image', 'SDL2_image-' + TAG)
@@ -45,8 +45,11 @@ def get(ports, settings, shared):
 
     for src in srcs:
       o = os.path.join(ports.get_build_dir(), 'sdl2_image', src + '.o')
-      commands.append([shared.PYTHON, shared.EMCC, '-c', os.path.join(src_dir, src),
-                       '-O2', '-s', 'USE_SDL=2', '-o', o, '-w'] + defs)
+      command = [shared.PYTHON, shared.EMCC, '-c', os.path.join(src_dir, src),
+                 '-O2', '-s', 'USE_SDL=2', '-o', o, '-w'] + defs
+      if settings.USE_PTHREADS:
+          command += [ '-s', 'USE_PTHREADS' ]
+      commands.append(command)
       o_s.append(o)
     shared.safe_ensure_dirs(os.path.dirname(o_s[0]))
     ports.run_commands(commands)

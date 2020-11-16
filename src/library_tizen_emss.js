@@ -1360,6 +1360,14 @@ const LibraryTizenEmss = {
         LOW_LATENCY: 1,
         VIDEO_TEXTURE: 2,
       });
+      const LatencyMode = Object.freeze({
+        NORMAL: 0,
+        LOW_LATENCY: 1,
+      });
+      const RenderingMode = Object.freeze({
+        MEDIA_ELEMENT: 0,
+        VIDEO_TEXTURE: 1,
+      });
 
       // Matches samsung::wasm::ElementaryMediaStreamSource::ReadyState
       const ReadyState = Object.freeze({
@@ -1377,6 +1385,17 @@ const LibraryTizenEmss = {
         ['low-latency', Mode.LOW_LATENCY ],
         ['video-texture', Mode.VIDEO_TEXTURE ],
       ]);
+      const STR_TO_LATENCY_MODE = new Map([
+        ['latency-mode-normal', LatencyMode.NORMAL           ],
+        ['latency-mode-low', LatencyMode.LOW_LATENCY ],
+      ]);
+      const STR_TO_RENDERING_MODE = new Map([
+        ['rendering-mode-media-element', LatencyMode.MEDIA_ELEMENT ],
+        ['rendering-mode-video-texture', LatencyMode.VIDEO_TEXTURE ],
+      ]);
+      const MODE_TO_STR = Array.from(STR_TO_MODE.keys());
+      const LATENCY_MODE_TO_STR = Array.from(STR_TO_LATENCY_MODE.keys());
+      const RENDERING_MODE_TO_STR = Array.from(STR_TO_RENDERING_MODE.keys());
 
       const STR_TO_READY_STATE = new Map([
         ['detached',     ReadyState.DETACHED     ],
@@ -1526,6 +1545,44 @@ const LibraryTizenEmss = {
         _stringToMode: function(input) {
           return (STR_TO_MODE.has(input) ? STR_TO_MODE.get(input) : -1);
         },
+        _modesToLegacyMode: function(
+            latencyMode, renderingMode, allowVideoTexture) {
+          const legacyMode = (() => {
+            if (allowVideoTexture && renderingMode == RenderingMode.VIDEO_TEXTURE) {
+              return Mode.VIDEO_TEXTURE;
+            }
+            if (latencyMode == LatencyMode.NORMAL) {
+              return Mode.NORMAL
+            }
+            if (latencyMode == LatencyMode.LOW_LATENCY) {
+              return Mode.LOW_LATENCY;
+            }
+            return -1;
+          })();
+          if (legacyMode != -1) {
+            return cEnumToString(MODE_TO_STR, legacyMode);
+          } else {
+            return '';
+          }
+        },
+        _stringToLatencyMode: function(input) {
+          return STR_TO_LATENCY_MODE.has(input)
+            ? STR_TO_LATENCY_MODE.get(input)
+            : -1;
+        },
+        _latencyModeToString: function(input) {
+          return EmssCommon._cEnumToString(
+              LATENCY_MODE_TO_STR, input);
+        },
+        _stringToRenderingMode: function(input) {
+          return STR_TO_RENDERING_MODE.has(input)
+            ? STR_TO_RENDERING_MODE.get(input)
+            : -1;
+        },
+        _renderingModeToString: function(input) {
+          return EmssCommon._cEnumToString(
+              RENDERING_MODE_TO_STR, input);
+        },
         _stringToReadyState: function(input) {
           return (STR_TO_READY_STATE.has(input) ?
               STR_TO_READY_STATE.get(input) : -1);
@@ -1544,29 +1601,55 @@ const LibraryTizenEmss = {
 
   EMSSCreate__deps: ['$WasmElementaryMediaStreamSource', '$TIZENTVWASM'],
   EMSSCreate__proxy: 'sync',
-  EMSSCreate: function(mode) {
+  EMSSCreate: function(latencyMode, renderingMode) {
     if (!TIZENTVWASM.hasTizenTVWasm()) {
-      const abortMsg = 'TizenTV WASM extensions were not found on this device.';
-      console.error(
-          `${abortMsg} TizenTV WASM extensions are available on 2020 Tizen SmartTV devices or newer. Aborting...`);
+      const abortMsg =
+        'TizenTV WASM extensions were not found on this device.';
+      console.error(`${abortMsg} TizenTV WASM extensions are available `
+        + `on 2020 Tizen SmartTV devices or newer. Aborting...`);
       abort(abortMsg);
     }
     const emssApiInfo = TIZENTVWASM.getAvailableApis().find((apiInfo) => {
       return apiInfo.name == 'ElementaryMediaStreamSource';
     });
     if (!emssApiInfo) {
-      console.error(
-          `ElementaryMediaStreamSource API is not available on this device.`);
+      console.error(`ElementaryMediaStreamSource API is`
+                    + `not available on this device.`);
       return -1;
     }
 #if TIZEN_EMSS_DEBUG
     else {
-      console.info(
-          `Creating ElementaryMediaStreamSource, version: ${emssApiInfo.version}`);
+      console.info(`Creating ElementaryMediaStreamSource, `
+                   + `version: ${emssApiInfo.version}`);
     }
 #endif
-    const elementaryMediaStreamSource = new tizentvwasm.ElementaryMediaStreamSource(
-      ['normal', 'low-latency', 'video-texture'][mode]);
+    const elementaryMediaStreamSource = (() => {
+      try {
+        if (emssApiInfo.features.includes('construct-with-modes')) {
+          return new tizentvwasm.ElementaryMediaStreamSource(
+            WasmElementaryMediaStreamSource._latencyModeToString(latencyMode),
+            WasmElementaryMediaStreamSource._renderingModeToString(
+                renderingMode));
+        } else {
+          const allowVideoTexture = emssApiInfo.features.includes(
+              'video-texture');
+          const legacyMode = WasmElementaryMediaStreamSource._modesToLegacyMode(
+              latencyMode, renderingMode, allowVideoTexture);
+          if (legacyMode == '') {
+            return null;
+          }
+          return new tizentvwasm.ElementaryMediaStreamSource(legacyMode);
+        }
+      } catch (error) {
+        console.error(`Error during creating EMSS: ${error}`);
+        return null;
+      }
+    })();
+    if (elementaryMediaStreamSource == null) {
+      console.error(`Arguments: (${[...arguments].join(', ')})`
+                    + ` are not applicable to EMSS constructor`);
+      return -1;
+    }
     const handle = WasmElementaryMediaStreamSource.handleMap.length;
     WasmElementaryMediaStreamSource.handleMap[handle]
       = elementaryMediaStreamSource;
@@ -1719,6 +1802,22 @@ const LibraryTizenEmss = {
     return WasmElementaryMediaStreamSource._getPropertyString(
       handle, 'mode', retPtr, 'i32',
       WasmElementaryMediaStreamSource._stringToMode);
+  },
+
+  EMSSGetLatencyMode__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSGetLatencyMode__proxy: 'sync',
+  EMSSGetLatencyMode: function(handle, retPtr) {
+    return WasmElementaryMediaStreamSource._getPropertyString(
+      handle, 'latencyMode', retPtr, 'i32',
+      WasmElementaryMediaStreamSource._stringToLatencyMode);
+  },
+
+  EMSSGetRenderingMode__deps: ['$WasmElementaryMediaStreamSource'],
+  EMSSGetRenderingMode__proxy: 'sync',
+  EMSSGetRenderingMode: function(handle, retPtr) {
+    return WasmElementaryMediaStreamSource._getPropertyString(
+      handle, 'renderingMode', retPtr, 'i32',
+      WasmElementaryMediaStreamSource._stringToRenderingMode);
   },
 
   EMSSGetReadyState__deps: ['$WasmElementaryMediaStreamSource'],

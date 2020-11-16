@@ -33,6 +33,12 @@ struct EmssVersionInfo {
   /// `ElementaryMediaTrackConfig::decoding_mode` is supported on this device.
   bool has_decoding_mode;
 
+  /// A combination of
+  /// `ElementaryMediaStreamSource::LatencyMode::kVideoTexture` and
+  /// `ElementaryMediaStreamSource::RenderingMode::kVideoTexture` is supported
+  /// on this device.
+  bool has_low_latency_video_texture;
+
   /// Queries platform to get `ElementaryMediaStreamSource` features available
   /// on the current device.
   static EmssVersionInfo Create();

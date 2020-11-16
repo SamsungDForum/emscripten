@@ -144,6 +144,12 @@ class ElementaryMediaStreamSource final {
   /// Defines modes in which `ElementaryMediaStreamSource` can operate. The mode
   /// is set in `ElementaryMediaStreamSource`'s constructor and cannot be
   /// changed during its lifetime.
+  ///
+  /// @deprecated
+  /// `ElementaryMediaStreamSource::Mode` is deprecated, use
+  /// `ElementaryMediaStreamSource::LatencyMode` and
+  /// `ElementaryMediaStreamSource::RenderingMode` (and associated functions)
+  /// instead.
   enum class Mode {
     /// This is a default mode, appropriate for most playback scenarios (most
     /// notably on-demand video playback).
@@ -176,7 +182,7 @@ class ElementaryMediaStreamSource final {
     kLowLatency,
 
     /// This mode makes WASM Player decode video packets into GL textures so
-    /// that they can be renderer by App using OpenGL. Video is not displayed on
+    /// that they can be rendered by App using OpenGL. Video is not displayed on
     /// the associated `HTMLMediaElement`.
     ///
     /// Source will buffer packets until they can be rendered according to their
@@ -196,6 +202,65 @@ class ElementaryMediaStreamSource final {
     /// This mode is supported only on devices which have
     /// `EmssVersionInfo::has_video_texture` set to `true`.
     kVideoTexture
+  };
+
+  /// Defines modes in which `ElementaryMediaStreamSource` can operate. The mode
+  /// is set in `ElementaryMediaStreamSource`'s constructor and cannot be
+  /// changed during its lifetime.
+  enum class LatencyMode {
+    /// This is a default mode, appropriate for most playback scenarios (most
+    /// notably on-demand video playback).
+    ///
+    /// Pipeline clock is controlled by the Platform when WASM Player works in
+    /// normal latency mode. `ElementaryMediaPacket`s will be buffered by
+    /// Platform until they can be rendered according to their pts values.
+    ///
+    /// Platform guarantees smooth media playback when working in this mode,
+    /// provided packets are delivered to the Source on time (i.e. internal
+    /// buffer overrun doesn't happen).
+    kNormal,
+
+    /// This mode is appropriate for low latency playback scenarios (live
+    /// streaming).
+    ///
+    /// Pipeline clock is controlled by the application when the player works
+    /// in low latency mode. Source will render appended packets as soon as
+    /// possible and won't perform any internal buffering. Pipeline clock is set
+    /// according to the pts values of appended packets.
+    ///
+    /// @remarks
+    /// - the application is responsible for maintaining stream synchronization,
+    /// - packets are rendered as soon as possible, so fps is dependent entirely
+    ///   on when packets are appended,
+    /// - media element's time is calculated based on packets' pts values, so
+    ///   they should be set correctly,
+    /// - packets should be tuned for low latency playback (e.g. B-frames are
+    ///   not allowed in video streams).
+    kLow,
+  };
+
+  /// Defines modes in which `ElementaryMediaStreamSource` can operate. The mode
+  /// is set in `ElementaryMediaStreamSource`'s constructor and cannot be
+  /// changed during its lifetime.
+  enum class RenderingMode {
+    /// This mode is appropriate for decoding video into HTMLMediaElement.
+    kMediaElement,
+
+    /// This mode makes WASM Player decode video packets into GL textures so
+    /// that they can be rendered by App using OpenGL. Video is not displayed on
+    /// the associated `HTMLMediaElement`.
+    ///
+    /// Application should constantly request for new pictures by calling
+    /// `ElementaryMediaTrack::FillTextureWithNextFrame()` method. This method
+    /// is called by Platform when the texture should be displayed, so the
+    /// application should render the texture immediately. After the texture is
+    /// rendered, it should be released with the
+    /// `ElementaryMediaTrack::RecycleTexture()` method.
+    ///
+    /// @remark
+    /// This mode is supported only on devices which have
+    /// `EmssVersionInfo::has_video_texture` set to `true`.
+    kVideoTexture,
   };
 
   /// Enumerates all possible states of `ElementaryMediaStreamSource`. Current
@@ -269,7 +334,18 @@ class ElementaryMediaStreamSource final {
   /// lifetime of the object.
   ///
   /// @param[in] mode Create a source that uses specified playback mode.
+  ///
+  /// @deprecated
+  /// Use `ElementaryMediaStreamSource(LatencyMode, RenderingMode)` instead.
   explicit ElementaryMediaStreamSource(Mode mode = Mode::kNormal);
+
+  /// Creates a source with the given mode. Mode cannot be changed during
+  /// lifetime of the object.
+  ///
+  /// @param[in] latencyMode Latency mode the player should use.
+  /// @param[in] renderingMode Specify render target of the player.
+  ElementaryMediaStreamSource(LatencyMode latency_mode,
+                              RenderingMode rendering_mode);
   ElementaryMediaStreamSource(const ElementaryMediaStreamSource&) = delete;
   ElementaryMediaStreamSource(ElementaryMediaStreamSource&&);
   ElementaryMediaStreamSource& operator=(const ElementaryMediaStreamSource&) =
@@ -443,7 +519,27 @@ class ElementaryMediaStreamSource final {
   /// `operation_result` field set to `OperationResult::kSuccess` and a valid
   /// `Mode` representing mode of the source on success, otherwise a code
   /// describing the error.
+  ///
+  /// @deprecated
+  /// Use `GetLatencyMode()` and `GetRenderingMode()` instead
   Result<Mode> GetMode() const;
+
+  /// Returns the latency mode of the source, as set during object construction.
+  ///
+  /// @return `Result<ElementaryMediaStreamSource::LatencyMode>` with
+  /// `operation_result` field set to `OperationResult::kSuccess` and a valid
+  /// `LatencyMode` representing mode of the source on success, otherwise a code
+  /// describing the error.
+  Result<LatencyMode> GetLatencyMode() const;
+
+  /// Returns the rendering mode of the source, as set during object
+  /// construction.
+  ///
+  /// @return `Result<ElementaryMediaStreamSource::RenderingMode>` with
+  /// `operation_result` field set to `OperationResult::kSuccess` and a valid
+  /// `RenderingMode` representing mode of the source on success, otherwise a
+  /// code describing the error.
+  Result<RenderingMode> GetRenderingMode() const;
 
   /// Returns current `ReadyState` of the source.
   ///
@@ -478,6 +574,7 @@ class ElementaryMediaStreamSource final {
   const char* GetURL() const;
 
  private:
+  explicit ElementaryMediaStreamSource(int handle, bool is_low_latency);
   std::function<void(OperationResult, int32_t handle)> GetOnAddTrackDoneCb(
       ElementaryMediaTrack::TrackType type,
       std::function<void(OperationResult, ElementaryMediaTrack)>

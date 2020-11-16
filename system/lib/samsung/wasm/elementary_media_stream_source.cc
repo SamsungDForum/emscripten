@@ -71,16 +71,34 @@ void OnClosedCaptionsListenerCallback(const uint8_t* closed_captions,
                              static_cast<size_t>(captions_length));
 }
 
+int FromLegacyMode(ElementaryMediaStreamSource::Mode mode) {
+  switch (static_cast<EMSSMode>(mode)) {
+    case EMSSModeNormal:
+      return EMSSCreate(EMSSLatencyModeNormal,
+                        EMSSRenderingModeMediaElement);
+    case EMSSModeLowLatency:
+      return EMSSCreate(EMSSLatencyModeLowLatency,
+                        EMSSRenderingModeMediaElement);
+    case EMSSModeVideoTexture:
+      return EMSSCreate(EMSSLatencyModeNormal,
+                        EMSSRenderingModeVideoTexture);
+  }
+  return -1;
+}
+
 }  // namespace
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(Mode mode)
-    : handle_(EMSSCreate(static_cast<EMSSMode>(mode))),
-      html_media_element_(nullptr),
-      listener_(nullptr),
-      url_(CAPICall<char*>(EMSSCreateObjectURL, handle_).value, std::free),
-      version_info_(EmssVersionInfo::Create()) {
-  use_session_id_emulation_ =
-      version_info_.has_legacy_emss && mode != Mode::kLowLatency;
+    : ElementaryMediaStreamSource(FromLegacyMode(mode),
+                                  mode == Mode::kLowLatency) {
+}
+
+ElementaryMediaStreamSource::ElementaryMediaStreamSource(
+  LatencyMode latency_mode, RenderingMode rendering_mode)
+    : ElementaryMediaStreamSource(EMSSCreate(
+          static_cast<EMSSLatencyMode>(latency_mode),
+          static_cast<EMSSRenderingMode>(rendering_mode)),
+        latency_mode == LatencyMode::kLow) {
 }
 
 ElementaryMediaStreamSource::ElementaryMediaStreamSource(
@@ -228,6 +246,19 @@ Result<ElementaryMediaStreamSource::Mode> ElementaryMediaStreamSource::GetMode()
   return {static_cast<Mode>(result.value), result.operation_result};
 }
 
+Result<ElementaryMediaStreamSource::LatencyMode>
+ElementaryMediaStreamSource::GetLatencyMode() const {
+  const auto result = CAPICall<EMSSLatencyMode>(EMSSGetLatencyMode, handle_);
+  return {static_cast<LatencyMode>(result.value), result.operation_result};
+}
+
+Result<ElementaryMediaStreamSource::RenderingMode>
+ElementaryMediaStreamSource::GetRenderingMode() const {
+  const auto result = CAPICall<EMSSRenderingMode>(
+      EMSSGetRenderingMode, handle_);
+  return {static_cast<RenderingMode>(result.value), result.operation_result};
+}
+
 Result<ElementaryMediaStreamSource::ReadyState>
 ElementaryMediaStreamSource::GetReadyState() const {
   const auto result = CAPICall<EMSSReadyState>(EMSSGetReadyState, handle_);
@@ -236,6 +267,17 @@ ElementaryMediaStreamSource::GetReadyState() const {
 
 const char* ElementaryMediaStreamSource::GetURL() const {
   return url_.get();
+}
+
+ElementaryMediaStreamSource::ElementaryMediaStreamSource(
+  int handle, bool is_low_latency)
+    : handle_(handle),
+      html_media_element_(nullptr),
+      listener_(nullptr),
+      url_(CAPICall<char*>(EMSSCreateObjectURL, handle_).value, std::free),
+      version_info_(EmssVersionInfo::Create()) {
+  use_session_id_emulation_ =
+      version_info_.has_legacy_emss && is_low_latency;
 }
 
 Result<void> ElementaryMediaStreamSource::SetListener(

@@ -20,7 +20,18 @@ typedef struct EMSSElementaryVideoTrackConfig EMSSElementaryVideoTrackConfig;
 typedef enum EMSSMode {
   EMSSModeNormal = 0,
   EMSSModeLowLatency,
+  EMSSModeVideoTexture,
 } EMSSMode;
+
+typedef enum EMSSLatencyMode {
+  EMSSLatencyModeNormal = 0,
+  EMSSLatencyModeLowLatency,
+} EMSSLatencyMode;
+
+typedef enum EMSSRenderingMode {
+  EMSSRenderingModeMediaElement = 0,
+  EMSSRenderingModeVideoTexture,
+} EMSSRenderingMode;
 
 typedef enum EMSSReadyState {
   EMSSReadyStateDetached = 0,
@@ -43,7 +54,8 @@ typedef void (*OnAddTrackDone)(EMSSOperationResult result,
                                int outTrackHandle,
                                void* userData);
 
-extern int EMSSCreate(EMSSMode latencyMode);
+extern int EMSSCreate(EMSSLatencyMode latencyMode,
+                      EMSSRenderingMode renderingMode);
 extern EMSSOperationResult EMSSRemove(int handle);
 extern EMSSOperationResult EMSSCreateObjectURL(int handle, char** out);
 extern EMSSOperationResult EMSSRevokeObjectURL(char* url);
@@ -76,6 +88,10 @@ extern EMSSOperationResult EMSSOpen(int handle,
 extern EMSSOperationResult EMSSGetDuration(int handle, double* out);
 extern EMSSOperationResult EMSSSetDuration(int handle, double newDuration);
 extern EMSSOperationResult EMSSGetMode(int handle, EMSSMode* out);
+extern EMSSOperationResult EMSSGetLatencyMode(int handle,
+                                              EMSSLatencyMode* out);
+extern EMSSOperationResult EMSSGetRenderingMode(int handle,
+                                                EMSSRenderingMode* out);
 extern EMSSOperationResult EMSSGetReadyState(int handle, EMSSReadyState* out);
 
 extern EMSSOperationResult EMSSClearListeners(int handle);

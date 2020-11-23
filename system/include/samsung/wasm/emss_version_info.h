@@ -39,6 +39,10 @@ struct EmssVersionInfo {
   /// on this device.
   bool has_low_latency_video_texture;
 
+  /// `ElementaryMediaStreamSource::LatencyMode::kUltraLow` is supported on
+  /// this device.
+  bool has_ultra_low_latency;
+
   /// Queries platform to get `ElementaryMediaStreamSource` features available
   /// on the current device.
   static EmssVersionInfo Create();

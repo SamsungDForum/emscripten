@@ -26,6 +26,7 @@ typedef enum EMSSMode {
 typedef enum EMSSLatencyMode {
   EMSSLatencyModeNormal = 0,
   EMSSLatencyModeLowLatency,
+  EMSSLatencyModeUltraLowLatency,
 } EMSSLatencyMode;
 
 typedef enum EMSSRenderingMode {
@@ -88,8 +89,7 @@ extern EMSSOperationResult EMSSOpen(int handle,
 extern EMSSOperationResult EMSSGetDuration(int handle, double* out);
 extern EMSSOperationResult EMSSSetDuration(int handle, double newDuration);
 extern EMSSOperationResult EMSSGetMode(int handle, EMSSMode* out);
-extern EMSSOperationResult EMSSGetLatencyMode(int handle,
-                                              EMSSLatencyMode* out);
+extern EMSSOperationResult EMSSGetLatencyMode(int handle, EMSSLatencyMode* out);
 extern EMSSOperationResult EMSSGetRenderingMode(int handle,
                                                 EMSSRenderingMode* out);
 extern EMSSOperationResult EMSSGetReadyState(int handle, EMSSReadyState* out);

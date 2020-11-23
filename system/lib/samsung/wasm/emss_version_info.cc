@@ -20,8 +20,10 @@ EmssVersionInfo EmssVersionInfo::Create() {
   info.has_emss = samsung::wasm::IsApiSupported(api_name, 1);
   info.has_video_texture = samsung::wasm::IsApiSupported(api_name, 2);
   info.has_decoding_mode = samsung::wasm::IsApiSupported(api_name, 3);
-  info.has_low_latency_video_texture = samsung::wasm::IsApiSupported(
-      api_name, 4);
+  info.has_low_latency_video_texture =
+      samsung::wasm::IsApiSupported(api_name, 4);
+  info.has_ultra_low_latency = samsung::wasm::IsApiSupported(api_name, 5);
+
   return info;
 }
 

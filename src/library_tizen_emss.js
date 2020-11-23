@@ -1363,6 +1363,7 @@ const LibraryTizenEmss = {
       const LatencyMode = Object.freeze({
         NORMAL: 0,
         LOW_LATENCY: 1,
+        ULTRA_LOW_LATENCY: 2,
       });
       const RenderingMode = Object.freeze({
         MEDIA_ELEMENT: 0,
@@ -1386,8 +1387,9 @@ const LibraryTizenEmss = {
         ['video-texture', Mode.VIDEO_TEXTURE ],
       ]);
       const STR_TO_LATENCY_MODE = new Map([
-        ['latency-mode-normal', LatencyMode.NORMAL           ],
-        ['latency-mode-low', LatencyMode.LOW_LATENCY ],
+        ['latency-mode-normal', LatencyMode.NORMAL               ],
+        ['latency-mode-low', LatencyMode.LOW_LATENCY             ],
+        ['latency-mode-ultra-low', LatencyMode.ULTRA_LOW_LATENCY ],
       ]);
       const STR_TO_RENDERING_MODE = new Map([
         ['rendering-mode-media-element', LatencyMode.MEDIA_ELEMENT ],
@@ -1408,6 +1410,7 @@ const LibraryTizenEmss = {
       WasmElementaryMediaStreamSource = {
         handleMap: [],
         listenerMap: {},
+        LatencyMode: LatencyMode,
         _callFunction: function(handle, name, ...args) {
           return EmssCommon._callFunction(
             WasmElementaryMediaStreamSource.handleMap,
@@ -1613,7 +1616,7 @@ const LibraryTizenEmss = {
       return apiInfo.name == 'ElementaryMediaStreamSource';
     });
     if (!emssApiInfo) {
-      console.error(`ElementaryMediaStreamSource API is`
+      console.error(`ElementaryMediaStreamSource API is `
                     + `not available on this device.`);
       return -1;
     }
@@ -1625,6 +1628,14 @@ const LibraryTizenEmss = {
 #endif
     const elementaryMediaStreamSource = (() => {
       try {
+        if (latencyMode
+              == WasmElementaryMediaStreamSource.LatencyMode.ULTRA_LOW_LATENCY
+            && !emssApiInfo.features.includes('ultra-low-latency')) {
+          console.warn(`Ultra low latency mode is not available on this `
+                       + `device. Falling back to low latency mode.`)
+          latencyMode = WasmElementaryMediaStreamSource.LatencyMode.LOW_LATENCY;
+        }
+
         if (emssApiInfo.features.includes('construct-with-modes')) {
           return new tizentvwasm.ElementaryMediaStreamSource(
             WasmElementaryMediaStreamSource._latencyModeToString(latencyMode),

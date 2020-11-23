@@ -237,6 +237,16 @@ class ElementaryMediaStreamSource final {
     /// - packets should be tuned for low latency playback (e.g. B-frames are
     ///   not allowed in video streams).
     kLow,
+
+    /// This mode is appropriate for ultra low latency playback scenarios (live
+    /// streaming games). It works in the same way as low-latency mode with
+    /// following features:
+    /// - disabled video enhancements,
+    /// - enabled game mode.
+    ///
+    /// @remarks
+    /// Same as in `LatencyMode::kLow` latency mode.
+    kUltraLow,
   };
 
   /// Defines modes in which `ElementaryMediaStreamSource` can operate. The mode

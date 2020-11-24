@@ -1560,7 +1560,7 @@ const LibraryTizenEmss = {
             return -1;
           })();
           if (legacyMode != -1) {
-            return cEnumToString(MODE_TO_STR, legacyMode);
+            return EmssCommon._cEnumToString(MODE_TO_STR, legacyMode);
           } else {
             return '';
           }

@@ -674,6 +674,159 @@ void* EMSCRIPTEN_KEEPALIVE emscripten_sync_run_in_main_thread_7(int function, vo
   return q.returnValue.vp;
 }
 
+// Since the number of queued heavy calls is not limited by CALL_QUEUE_SIZE,
+// we use a linked list, not a buffer.
+// Doubly-linked to make adding new calls at the end fast.
+typedef struct heavy_call_queue {
+  em_queued_call* call;
+  double end_time;
+  int call_no;
+  struct heavy_call_queue* next;
+  struct heavy_call_queue* prev;
+} heavy_call_queue;
+
+// This is only relevant for the main thread.
+static heavy_call_queue heavy_call_queue_head = {
+  .next = &heavy_call_queue_head,
+  .prev = &heavy_call_queue_head,
+};
+
+static int heavy_call_queue_empty() {
+  return heavy_call_queue_head.next == &heavy_call_queue_head;
+}
+
+static void heavy_call_queue_push(em_queued_call* call, double end_time,
+                                  int call_no) {
+  assert(call);
+
+  heavy_call_queue* new_node = malloc(sizeof(heavy_call_queue));
+  assert(new_node);  // catch OOM scenarios like in em_queued_call_malloc().
+  new_node->call = call;
+  new_node->call_no = call_no;
+  new_node->end_time = end_time;
+
+  new_node->next = &heavy_call_queue_head;
+  new_node->prev = heavy_call_queue_head.prev;
+  heavy_call_queue_head.prev->next = new_node;
+  heavy_call_queue_head.prev = new_node;
+}
+
+static void heavy_call_queue_remove(heavy_call_queue* node) {
+  assert(node && node != &heavy_call_queue_head);
+
+  node->prev->next = node->next;
+  node->next->prev = node->prev;
+  free(node);
+}
+
+extern int heavy_call_timeout_msecs(int call_no, const void* args);
+
+// The only heavy calls are newselect and poll.
+// If call is heavy, then set `timeout` and `call_no`.
+static int is_heavy_call(const em_queued_call* call, int *timeout, int *call_no) {
+  assert(call && timeout && call_no);
+
+  // Only main thread need to worry about heavy calls.
+  if (!emscripten_is_main_browser_thread() ||
+      call->functionEnum != EM_PROXIED_JS_FUNCTION) {
+    return 0;
+  }
+  *call_no = EM_ASM_INT({
+    const index = $0;
+    if (index <= 0) {
+      // Proxied JS library funcs are encoded as positive values.
+      return 0;
+    }
+    const func = proxiedFunctionTable[index].name;
+    if (func === "___syscall142") {  // newselect
+       return 142;
+    } else if (func === "___syscall168") {  // poll
+      return 168;
+    } else {
+      return 0;
+    }
+  }, (int) call->functionPtr);
+
+  if (*call_no == 142 || *call_no == 168) {
+    const void* args = &call->args[1].d;
+    *timeout = heavy_call_timeout_msecs(*call_no, args);
+    return 1;
+  }
+  return 0;
+}
+
+// call must be `newselect`.
+static void newselect_clear_fdsets(em_queued_call* call) {
+  const void* args = &call->args[1].d;
+
+  EM_ASM({
+    let args = $0 / 8;
+     // Pointer to the array of syscall arguments is second argument.
+    let args_ptr = HEAPF64[args + 1] / 4;
+
+    // Second, third and fourth syscall argument.
+    let readfds = HEAP32[args_ptr + 1] / 4;
+    let writefds = HEAP32[args_ptr + 2] / 4;
+    let exceptfds = HEAP32[args_ptr + 3] / 4;
+
+    // Currently fd_set has 64 bits.
+    if (readfds) {
+      HEAP32[readfds] = 0;
+      HEAP32[readfds + 1] = 0;
+    }
+    if (writefds) {
+      HEAP32[writefds] = 0;
+      HEAP32[writefds + 1] = 0;
+    }
+    if (exceptfds) {
+      HEAP32[exceptfds] = 0;
+      HEAP32[exceptfds + 1] = 0;
+    }
+  }, args);
+}
+
+static void heavy_call_cleanup(heavy_call_queue* node, int return_value) {
+  em_queued_call* call = node->call;
+  call->returnValue.d = return_value;
+
+  // If the caller is detached from this operation, it is the main thread's responsibility to free
+  // up the call object.
+  if (call->calleeDelete) {
+    emscripten_async_waitable_close(call);
+    // No need to wake a listener, nothing is listening to this since the call object is detached.
+  } else {
+    // The caller owns this call object, it is listening to it and will free it up.
+    call->operationDone = 1;
+    emscripten_futex_wake(&call->operationDone, INT_MAX);
+  }
+
+  heavy_call_queue_remove(node);
+}
+
+static void process_queued_heavy_calls() {
+  heavy_call_queue* next;
+  for (heavy_call_queue* node = heavy_call_queue_head.next;
+       node != &heavy_call_queue_head; node = next) {
+    next = node->next;
+    em_queued_call* call = node->call;
+
+    int ret = emscripten_receive_on_main_thread_js((int)call->functionPtr,
+                                                   call->args[0].i,
+                                                   &call->args[1].d);
+    if (ret != -EAGAIN) {
+      // Call has finished.
+      heavy_call_cleanup(node, ret);
+    } else if (node->end_time >= 0 && emscripten_get_now() >= node->end_time) {
+      // We hit timeout, return 0.
+      if (node->call_no == 142) {  // newselect
+        // Unfortunetely we have to set all fd sets to zero manually.
+        newselect_clear_fdsets(call);
+      }
+      heavy_call_cleanup(node, 0);
+    }
+  }
+}
+
 void EMSCRIPTEN_KEEPALIVE emscripten_current_thread_process_queued_calls() {
   // #if PTHREADS_DEBUG == 2
   //	EM_ASM(console.error('thread ' + _pthread_self() + ':
@@ -706,17 +859,46 @@ void EMSCRIPTEN_KEEPALIVE emscripten_current_thread_process_queued_calls() {
     return;
   }
 
+  // For heavy call information.
+  int timeout, call_no;
+  double end_time;
+
   int head = emscripten_atomic_load_u32((void*)&q->call_queue_head);
   int tail = emscripten_atomic_load_u32((void*)&q->call_queue_tail);
-  while (head != tail) {
-    // Assume that the call is heavy, so unlock access to the call queue while it is being
-    // performed.
-    pthread_mutex_unlock(&call_queue_lock);
-    _do_call(q->call_queue[head]);
-    pthread_mutex_lock(&call_queue_lock);
+  while (head != tail ||
+        (emscripten_is_main_browser_thread() && !heavy_call_queue_empty())) {
+    if (head != tail) {
+      // There is some call in the call queue.
+      if (is_heavy_call(q->call_queue[head], &timeout, &call_no)) {
+        // The next call is heavy. Move it to the heavy call queue.
+        if (timeout == -1) {  // No timeout.
+          end_time = -1;
+        } else {
+          end_time = emscripten_get_now() + timeout;
+        }
+        heavy_call_queue_push(q->call_queue[head], end_time, call_no);
+      } else {
+        // Normal call. Process it now.
+        pthread_mutex_unlock(&call_queue_lock);
+        _do_call(q->call_queue[head]);
+        pthread_mutex_lock(&call_queue_lock);
+      }
 
-    head = (head + 1) % CALL_QUEUE_SIZE;
-    emscripten_atomic_store_u32((void*)&q->call_queue_head, head);
+      // Adjust head.
+      head = (head + 1) % CALL_QUEUE_SIZE;
+      emscripten_atomic_store_u32((void*)&q->call_queue_head, head);
+    }
+
+    if (emscripten_is_main_browser_thread() && !heavy_call_queue_empty()) {
+      // During heavy call processing we don't touch the call_queue, so we can
+      // unlock the mutex.
+      pthread_mutex_unlock(&call_queue_lock);
+      // Process heavy calls now.
+      process_queued_heavy_calls();
+      pthread_mutex_lock(&call_queue_lock);
+    }
+
+    // Update tail.
     tail = emscripten_atomic_load_u32((void*)&q->call_queue_tail);
   }
   pthread_mutex_unlock(&call_queue_lock);

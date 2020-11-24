@@ -31,7 +31,14 @@
                 "modtime"
             ]
         }
-    }, 
+    },
+    {
+        "file": "libc/sys/select.h",
+        "defines": [
+            "FD_SETSIZE"
+        ],
+        "structs": {}
+    },
     {
         "file": "libc/sys/stat.h", 
         "defines": [

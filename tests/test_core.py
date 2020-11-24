@@ -8460,6 +8460,15 @@ NODEFS is no longer included by default; build with -lnodefs.js
     self.emcc_args += ['-DPOOL']
     test()
 
+  def test_poll_select_timeout(self):
+    self.set_setting('USE_PTHREADS', 1)
+    self.set_setting('PTHREAD_POOL_SIZE', 6)
+    self.set_setting('EXIT_RUNTIME', 1)
+    self.emcc_args += ['-std=c++17', '-s', 'TOTAL_MEMORY=100Mb']
+    js_engines = [NODE_JS + ['--experimental-wasm-threads', '--experimental-wasm-bulk-memory']]
+    # It can take some time.
+    self.do_run_in_out_file_test('tests', 'core', 'test_poll_select_timeout', js_engines=js_engines)
+
 
 # Generate tests for everything
 def make_run(name, emcc_args, settings=None, env=None):

@@ -24,15 +24,15 @@ typedef struct EMSSElementaryVideoTrackConfig {
   uint32_t framerate_den;
 } EMSSElementaryVideoTrackConfig;
 
-static_assert(offsetof(EMSSElementaryVideoTrackConfig, width) == 12,
+static_assert(offsetof(EMSSElementaryVideoTrackConfig, width) == 16,
               "EMSSElementaryVideoTrackConfig::width has wrong alignment");
-static_assert(offsetof(EMSSElementaryVideoTrackConfig, height) == 16,
+static_assert(offsetof(EMSSElementaryVideoTrackConfig, height) == 20,
               "EMSSElementaryVideoTrackConfig::height has wrong alignment");
 static_assert(
-    offsetof(EMSSElementaryVideoTrackConfig, framerate_num) == 20,
+    offsetof(EMSSElementaryVideoTrackConfig, framerate_num) == 24,
     "EMSSElementaryVideoTrackConfig::framerate_num has wrong alignment");
 static_assert(
-    offsetof(EMSSElementaryVideoTrackConfig, framerate_den) == 24,
+    offsetof(EMSSElementaryVideoTrackConfig, framerate_den) == 28,
     "EMSSElementaryVideoTrackConfig::framerate_den has wrong alignment");
 
 #ifdef __cplusplus

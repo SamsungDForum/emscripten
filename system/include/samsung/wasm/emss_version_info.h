@@ -30,6 +30,9 @@ struct EmssVersionInfo {
   /// device.
   bool has_video_texture;
 
+  /// `ElementaryMediaTrackConfig::decoding_mode` is supported on this device.
+  bool has_decoding_mode;
+
   /// Queries platform to get `ElementaryMediaStreamSource` features available
   /// on the current device.
   static EmssVersionInfo Create();

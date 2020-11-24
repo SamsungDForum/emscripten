@@ -19,6 +19,7 @@ EmssVersionInfo EmssVersionInfo::Create() {
   info.has_legacy_emss = samsung::wasm::IsApiSupported(api_name, 0);
   info.has_emss = samsung::wasm::IsApiSupported(api_name, 1);
   info.has_video_texture = samsung::wasm::IsApiSupported(api_name, 2);
+  info.has_decoding_mode = samsung::wasm::IsApiSupported(api_name, 3);
   return info;
 }
 

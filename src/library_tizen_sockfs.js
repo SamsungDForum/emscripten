@@ -104,6 +104,12 @@ mergeInto(LibraryManager.library, {
       }
       HEAP8[SOCKFS.socketMapPtr + fd] = 0;
     },
+    hasSocket: function(fd) {
+      if (fd < 0 || fd >= FS.MAX_OPEN_FD) {
+        return false;
+      }
+      return HEAP8[SOCKFS.socketMapPtr + fd] === 1;
+    },
     createSocketOnCurrentThread: function(family, type, protocol, socket) {
       var sock = {
         family: family,
@@ -158,13 +164,6 @@ mergeInto(LibraryManager.library, {
     },
     getStream: function(fd) {
       return SOCKFS.updateStream(fd);
-    },
-    hasSocket: function(fd) {
-      if (fd < 0 || fd >= FS.MAX_OPEN_FD) {
-        return false;
-      }
-      return HEAP8[SOCKFS.socketMapPtr + fd] === 1;
-      const stream = FS.getStream(fd);
     },
     getErrorCode: function(sock_fd) {
       const ErrorCodes = tizentvwasm.ErrorCodes;
@@ -343,9 +342,11 @@ mergeInto(LibraryManager.library, {
         }
       },
       close: function(stream) {
-        var sock = stream.node.sock;
+        const sock = stream.node.sock;
         const fd = stream.fd;
         sock.sock_ops.close(sock);
+        FS.destroyNode(stream.node);
+        FS.closeStream(stream);
         __closeSocketOnRenderThread(fd);
       }
     },
@@ -386,7 +387,7 @@ mergeInto(LibraryManager.library, {
           throw new FS.ErrnoError(SOCKFS.getErrorCode());
         }
 
-        return SOCKFS.pollEventsConvert(poll_fd.revents);
+        return SOCKFS.pollEventsConvertFromJS(poll_fd.revents);
       },
       ioctl: function(sock, request, arg) {
         console.log("SOCKFS ioctl() not implemented");
@@ -1016,9 +1017,9 @@ mergeInto(LibraryManager.library, {
       }
       return addr;
     },
-    pollEventsConvert: function(revents) {
+    pollFlagsMap: function() {
       const PollFlags = tizentvwasm.PollFlags;
-      const flags_map = new Map([
+      const flagsMap = new Map([
         [ PollFlags.POLLIN,     {{{ cDefine('POLLIN')    }}}],
         [ PollFlags.POLLRDNORM, {{{ cDefine('POLLRDNORM')}}}],
         [ PollFlags.POLLRDBAND, {{{ cDefine('POLLRDBAND')}}}],
@@ -1030,10 +1031,23 @@ mergeInto(LibraryManager.library, {
         [ PollFlags.POLLHUP,    {{{ cDefine('POLLHUP')   }}}],
         [ PollFlags.POLLNVAL,   {{{ cDefine('POLLNVAL')  }}}],
       ]);
+
+      return flagsMap;
+    },
+    pollEventsConvertFromJS: function(revents) {
       let result = 0;
-      flags_map.forEach((value, key) => {
+      SOCKFS.pollFlagsMap().forEach((value, key) => {
         if ((revents & key) == key) {
           result |= value;
+        }
+      });
+      return result;
+    },
+    pollEventsConvertToJS: function(events) {
+      let result = 0;
+      SOCKFS.pollFlagsMap().forEach((value, key) => {
+        if ((events & value) == value) {
+          result |= key;
         }
       });
       return result;
@@ -1074,6 +1088,161 @@ mergeInto(LibraryManager.library, {
       });
       return result;
     },
+    getFDsUnionAtOffset: function(offset, readfds, writefds, exceptfds) {
+      return (readfds ? {{{ makeGetValue('readfds', 'offset', 'i32') }}} : 0)
+           | (writefds ? {{{ makeGetValue('writefds', 'offset', 'i32') }}} : 0)
+           | (exceptfds ? {{{ makeGetValue('exceptfds', 'offset', 'i32') }}} : 0);
+    },
+    countFDsInFdSets: function(nfds, readfds, writefds, exceptfds) {
+      const ret = {
+        total: 0,
+        sockets: 0
+      };
+
+      const fdSetSize = {{{ cDefine('FD_SETSIZE') }}};
+      if (nfds <= 0 || nfds > fdSetSize) {
+        return ret;
+      }
+
+      let offset = 0;
+      let fds = SOCKFS.getFDsUnionAtOffset(offset, readfds, writefds, exceptfds);
+      let fdShift = 0;
+      for (let fd = 0; fd < nfds; fd++) {
+        if ((fds & (1 << fdShift)) !== 0) {
+          ret.total++;
+          ret.sockets += (SOCKFS.hasSocket(fd) ? 1 : 0);
+        }
+
+        ++fdShift;
+        if (fdShift === 32) {
+          fdShift = 0;
+          offset += 4
+          fds = SOCKFS.getFDsUnionAtOffset(offset, readfds, writefds, exceptfds);
+        }
+      }
+
+      return ret;
+    },
+    fdsToSequence: function(nfds, fdsSetPtr, sockFDMap) {
+      if (!fdsSetPtr) {
+        return [];
+      }
+
+      const ret = [];
+      let offset = 0;
+      let fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
+      let fdShift = 0;
+      for (let fd = 0; fd < nfds; ++fd) {
+        if ((fds & (1 << fdShift)) !== 0) {
+          const sockFd = SOCKFS.getSocket(fd).sock_fd;
+          sockFDMap[sockFd] = fd;
+          ret.push(sockFd);
+        }
+
+        ++fdShift;
+        if (fdShift === 32) {
+          fdShift = 0;
+          offset += 4;
+          fds = {{{ makeGetValue('fdsSetPtr', 'offset', 'i32') }}};
+        }
+      }
+
+      return ret;
+    },
+    FD_ZERO: function(s) {  // Same name as FD_ZERO macro in select.h
+      for (let i = 0; i < SOCKFS.sizeof.FD_SET; ++i) {
+        HEAP8[s + i] = 0;
+      }
+    },
+    FD_SET: function(d, s) {  // Same name as FD_SET macro in select.h
+      HEAPU32[(s + ((d)/(8))) >> 2] |= (1 << (d) % (8*4));
+    },
+    setDescriptors: function(fdsSetPtr, resultSet, sockFDMap) {
+      if (!fdsSetPtr) {
+        return;
+      }
+
+      SOCKFS.FD_ZERO(fdsSetPtr);
+      for (const fd of resultSet) {
+        SOCKFS.FD_SET(sockFDMap[fd], fdsSetPtr);
+      }
+    },
+    timevalToUSec: function(timeoutPtr) {
+      if (!timeoutPtr) {
+        return -1;
+      }
+
+      const timevalTVSec = {{{ makeGetValue('timeoutPtr', C_STRUCTS.timeval.tv_sec, 'i32') }}};
+      const timevalTVUSec = {{{ makeGetValue('timeoutPtr', C_STRUCTS.timeval.tv_usec, 'i32') }}};
+      return (timevalTVSec * 1000000) + timevalTVUSec;
+    },
+    callSelect: function(nfds, readfds, writefds, exceptfds, timeout) {
+      const sockFDMap = new Map();
+      const readSeq = SOCKFS.fdsToSequence(nfds, readfds, sockFDMap);
+      const writeSeq = SOCKFS.fdsToSequence(nfds, writefds, sockFDMap);
+      const exceptSeq = SOCKFS.fdsToSequence(nfds, exceptfds, sockFDMap);
+      const timeoutUSec = SOCKFS.timevalToUSec(timeout);
+      let result = null;
+      try {
+        result = tizentvwasm.SocketsManager.select(readSeq, writeSeq, exceptSeq, timeoutUSec);
+      } catch (err) {
+        return -SOCKFS.getErrorCode();
+      }
+
+      SOCKFS.setDescriptors(readfds, result.getReadFds(), sockFDMap);
+      SOCKFS.setDescriptors(writefds, result.getWriteFds(), sockFDMap);
+      SOCKFS.setDescriptors(exceptfds, result.getExceptFds(), sockFDMap);
+
+      return result.getReadFds().length
+           + result.getWriteFds().length
+           + result.getExceptFds().length;
+    },
+    countFDsInPollFDs: function(fds, nfds) {
+      const ret = {
+        total: nfds,
+        sockets: 0
+      };
+
+      if (nfds <= 0) {
+        return ret;
+      }
+
+      for (let i = 0; i < nfds; i++) {
+        const pollfd = fds + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
+        const fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
+        ret.sockets += (SOCKFS.hasSocket(fd) ? 1 : 0);
+      }
+
+      return ret;
+    },
+    callPoll: function(fdsPtr, nfds, timeout) {
+      const pollFds = [];
+
+      for (let i = 0; i < nfds; i++) {
+        const pollfd = fdsPtr + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
+        const fd = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.fd, 'i32') }}};
+        const events = {{{ makeGetValue('pollfd', C_STRUCTS.pollfd.events, 'i16') }}};
+        const sockFd = SOCKFS.getSocket(fd).sock_fd;
+        const pollEvents = SOCKFS.pollEventsConvertToJS(events);
+
+        pollFds.push(new tizentvwasm.PollFd(sockFd, pollEvents));
+      }
+
+      let result = -1;
+      try {
+        result = tizentvwasm.SocketsManager.poll(pollFds, timeout);
+      } catch (err) {
+        return -SOCKFS.getErrorCode();
+      }
+
+      for (let i = 0; i < nfds; i++) {
+        const pollfd = fdsPtr + {{{ C_STRUCTS.pollfd.__size__ }}} * i;
+        const revents = SOCKFS.pollEventsConvertFromJS(pollFds[i].revents);
+        {{{ makeSetValue('pollfd', C_STRUCTS.pollfd.revents, 'revents', 'i16') }}}
+      }
+
+      return result;
+    },
   },
   _getSocketBuffer__proxy: 'sync',
   _getSocketBuffer: function() {
@@ -1087,6 +1256,10 @@ mergeInto(LibraryManager.library, {
   },
   _closeSocketOnRenderThread__proxy: 'sync',
   _closeSocketOnRenderThread: function(fd) {
+    const stream = FS.getStream(fd);
+    if (stream && stream.node) {
+      FS.destroyNode(stream.node);
+    }
     FS.closeStream(fd);
     SOCKFS.clearSocketFdInMap(fd);
   },

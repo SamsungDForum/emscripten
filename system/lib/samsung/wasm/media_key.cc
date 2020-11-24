@@ -35,10 +35,11 @@ struct MediaKey::AsyncImpl {
                                  void* userData) {
     auto cb = std::unique_ptr<MediaKey::SetupFinishedCallback>(
         static_cast<MediaKey::SetupFinishedCallback*>(userData));
-    (*cb)(static_cast<OperationResult>(error),
-          MediaKey{media_key_handle});
+    (*cb)(static_cast<OperationResult>(error), MediaKey{media_key_handle});
   }
 };
+
+MediaKey::MediaKey() : handle_(-1) {}
 
 MediaKey::MediaKey(MediaKey&& other)
     : handle_(std::exchange(other.handle_, -1)) {}

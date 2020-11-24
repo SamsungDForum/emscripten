@@ -1331,7 +1331,12 @@ var LibraryPThread = {
 #if ASSERTIONS
     assert(func.length == numCallArgs, 'Call args mismatch in emscripten_receive_on_main_thread_js');
 #endif
-    return func.apply(null, _emscripten_receive_on_main_thread_js_callArgs);
+    let thisArg = null;
+    if (func.name === "___syscall142" || func.name === "___syscall168") {
+      // Function is a heavy call.
+      thisArg = { returnEarly: true };
+    }
+    return func.apply(thisArg, _emscripten_receive_on_main_thread_js_callArgs);
   },
 
   $establishStackSpaceInJsModule: function(stackTop, stackMax) {
@@ -1346,6 +1351,31 @@ var LibraryPThread = {
     // Call inside asm.js/wasm module to set up the stack frame for this pthread in asm.js/wasm module scope
     establishStackSpace(stackTop, stackMax);
   },
+
+  heavy_call_timeout_msecs: function(call_no, args) {
+    // Pointer to the array of syscall arguments is second argument.
+    let args_ptr = HEAPF64[args / 8 + 1];
+
+    if (call_no == 142) {  // newselect
+      // Timeout is 5th syscall argument and has type `struct timeval*`.
+      // Convert it to milliseconds.
+
+      let tv = {{{ makeGetValue('args_ptr', '16', 'i32') }}};
+      if (tv === 0) {
+        // timeout is NULL, return negative value like in poll.
+        return -1;
+      }
+      let sec = {{{ makeGetValue('tv', C_STRUCTS.timeval.tv_sec, 'i32') }}};
+      let usec = {{{ makeGetValue('tv', C_STRUCTS.timeval.tv_usec, 'i32') }}};
+
+      return sec * 1000 + usec / 1000;
+    } else if (call_no == 168) {  // poll
+      // Timeout is 3rd syscall argument and is already in milliseconds.
+      return {{{ makeGetValue('args_ptr', '8', 'i32') }}};
+    }
+    // Not a heavy call!
+    return 0;
+  }
 };
 
 autoAddDeps(LibraryPThread, '$PThread');

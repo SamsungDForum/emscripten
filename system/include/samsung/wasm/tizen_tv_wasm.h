@@ -25,6 +25,11 @@ std::vector<std::string> GetSupportedInstructions();
 /// API level.
 bool IsApiSupported(const std::string& api_name, uint32_t api_level);
 
+/// Checks whether or not a given API supports a given feature on this
+/// platform.
+bool IsApiFeatureSupported(const std::string& api_name,
+                           const std::string& feature);
+
 }  // namespace wasm
 }  // namespace samsung
 

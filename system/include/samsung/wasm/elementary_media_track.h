@@ -63,6 +63,27 @@ class ElementaryMediaTrack final {
     kUnknown,
   };
 
+  /// Enumerates possible data decoding modes. Can be obtained by
+  /// `GetActiveDecodingMode()` to check what decoding mode is selected for a
+  /// particular track.
+  enum class ActiveDecodingMode {
+    /// Track is using platform hardware decoder.
+    kHardware,
+    /// Track is using platform software decoder.
+    kSoftware
+  };
+
+  /// Enumerates track types. Can be obtained by `GetType()`.
+  enum class TrackType {
+    /// This is an audio track.
+    kAudio,
+    /// This is a video track.
+    kVideo,
+    /// Unknown track type, usually a result of track being invalid (i.e.
+    /// `IsValid()` is `false`).
+    kUnknown,
+  };
+
   /// Default constructor, creates an *invalid* `ElementaryMediaTrack` object.
   /// It can be further replaced with a proper one, received with a call to
   /// `ElementaryMediaStreamSource::AddTrack()`.
@@ -80,6 +101,9 @@ class ElementaryMediaTrack final {
   ///
   /// @return `true` if track instance is valid, otherwise `false`.
   bool IsValid() const;
+
+  /// Returns a `TrackType` of this track.
+  TrackType GetType() const;
 
   /// Appends a given `ElementaryMediaPacket` to the track.
   ///
@@ -229,6 +253,7 @@ class ElementaryMediaTrack final {
   ///   `EmssVersionInfo::has_video_texture` set to `true`.
   ///
   /// @warning
+  /// * Can be called only on the *main* thread.
   /// * Can only be called in the
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
@@ -248,6 +273,54 @@ class ElementaryMediaTrack final {
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
+
+  /// Fills a provided texture with a decoded video frame synchronously. This
+  /// method blocks until texture is available and assigned to `texture_id`.
+  ///
+  /// The texture should be rendered as soon as possible after it's received.
+  ///
+  /// Player will decode frames sent with `ElementaryMediaTrack::AppendPacket()`
+  /// but won't render them on `HTMLMediaElement` when
+  /// `ElementaryMediaStreamSource` is in the
+  /// `ElementaryMediaStreamSource::Mode::kVideoTexture` mode. Instead, their
+  /// contents can be accessed by calling this method repeatedly.
+  ///
+  /// @remarks
+  /// * When `texture_id` is processed, it must be freed with
+  ///   `ElementaryMediaTrack::RecycleTexture()`.
+  /// * Sets the texture to the `GL_TEXTURE_EXTERNAL_OES` type.
+  /// * This mode is supported only on devices which have
+  ///   `EmssVersionInfo::has_video_texture` set to `true`.
+  ///
+  /// @warning
+  /// * This method may not return instantly if WASM Player's internal decoded
+  ///   frame queue is empty. This method will block until a decoded frame is
+  ///   available and as a blocking method it *cannot* be called on the main
+  ///   thread.
+  /// * Can only be called in the
+  ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
+  ///   `ElementaryMediaStreamSource`.
+  /// * Valid only for video tracks.
+  ///
+  /// @param texture_id A texture that will be filled with video frame.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @sa `ElementaryMediaTrack::RegisterCurrentGraphicsContext()`
+  /// @sa `ElementaryMediaTrack::RecycleTexture()`
+  Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
+
+  /// Returns decoder mode used for track.
+  ///
+  /// @return `Result<::ActiveDecodingMode>` with the `operation_result` field
+  /// set to `OperationResult::kSuccess` and a valid `ActiveDecodingMode`
+  /// identifying the active decoding mode, otherwise a code describing an
+  /// error.
+  ///
+  /// @sa `ActiveDecodingMode`
+  Result<ActiveDecodingMode> GetActiveDecodingMode() const;
 
   /// Returns id of the currently active session.
   ///
@@ -294,6 +367,10 @@ class ElementaryMediaTrack final {
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
   /// * Valid only for video track.
+  /// * Regular canvas is not available to worker contexts - when using it,
+  ///   method has to be called on main thread.
+  /// * Offscreen canvas is available to both: window and worker contexts,
+  ///   in such case method can be called on any thread.
   ///
   /// @param texture_id A texture that will be recycled.
   ///
@@ -323,6 +400,10 @@ class ElementaryMediaTrack final {
   ///   `ElementaryMediaStreamSource::Mode::kVideoTexture` mode of
   ///   `ElementaryMediaStreamSource`.
   /// * Valid only for video track.
+  /// * Regular canvas is not available to worker contexts - when using it,
+  ///   method has to be called on main thread.
+  /// * Offscreen canvas is available to both: window and worker contexts,
+  ///   in such case method can be called on any thread.
   ///
   /// @return `Result<void>` with `operation_result` field set to
   /// `OperationResult::kSuccess` on success, otherwise a code describing the
@@ -330,7 +411,6 @@ class ElementaryMediaTrack final {
   ///
   /// @sa `ElementaryMediaTrack::FillTextureWithNextFrame()`
   /// @sa `ElementaryMediaTrack::RecycleTexture()`
-
 
   Result<void> RegisterCurrentGraphicsContext();
 
@@ -368,6 +448,7 @@ class ElementaryMediaTrack final {
   class Impl;
 
   explicit ElementaryMediaTrack(int handle,
+                                TrackType type,
                                 EmssVersionInfo version_info,
                                 bool use_session_id_emulation);
 

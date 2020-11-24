@@ -287,6 +287,17 @@ function JSify(data, functionsOnly) {
           var sync = proxyingMode === 'sync';
           assert(typeof original === 'function');
           contentText = modifyFunction(snippet, function(name, args, body) {
+            const formatSelectOrPollTemplate = function(syscallNo, syscallName) {
+              return 'const sockFDsCount = SYSCALLS.syscall' + syscallNo + 'CountSocketFDs(arguments);\n'
+                   + 'if (sockFDsCount.sockets > 0 && sockFDsCount.sockets < sockFDsCount.total) {\n'
+                   + '  console.error(\'Mixing Tizen Sockets and other file descriptors is not supported in ' + syscallName + '()\');\n'
+                   + '  return -ERRNO_CODES.EBADF;\n'
+                   + '}\n'
+                   + 'if (sockFDsCount.sockets > 0 && sockFDsCount.sockets === sockFDsCount.total) {\n'
+                   + '  return SYSCALLS.syscall' + syscallNo + 'TizenSocketOnly(arguments);\n'
+                   + '}\n'
+                   + 'if (';
+            };
             let socketPresenceCheck = 'if (';
             if (ENVIRONMENT_MAY_BE_TIZEN && (ident == 'fd_close' ||
                 ident == 'fd_write' || ident == 'fd_read')) {
@@ -297,11 +308,9 @@ function JSify(data, functionsOnly) {
               socketPresenceCheck = 'const isSocket = SYSCALLS.isSocketOnCurrentThread(arguments);\n ' +
                 'if (!isSocket && ';
             } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall142')) { // select
-              socketPresenceCheck = 'const isSocket = SYSCALLS.syscall142ContainsSockets(arguments);\n' +
-                'if (!isSocket && ';
+              socketPresenceCheck = formatSelectOrPollTemplate(142, 'select');
             } else if (ENVIRONMENT_MAY_BE_TIZEN && (ident == '__syscall168')) { // poll
-              socketPresenceCheck = 'const isSocket = SYSCALLS.syscall168ContainsSockets(arguments);\n' +
-                'if (!isSocket && ';
+              socketPresenceCheck = formatSelectOrPollTemplate(168, 'poll');
             }
             return 'function ' + name + '(' + args + ') {\n' +
                 socketPresenceCheck + 'ENVIRONMENT_IS_PTHREAD) \n' +

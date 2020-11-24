@@ -22,19 +22,33 @@ namespace wasm {
 
 namespace {
 
+const EMSSDecodingMode kIgnoreDecodingMode = static_cast<EMSSDecodingMode>(-1);
+
 ::EMSSElementaryAudioTrackConfig ConfigToCAPI(
-    const ElementaryAudioTrackConfig& config) {
+    const ElementaryAudioTrackConfig& config,
+    const EmssVersionInfo& version_info) {
+  EMSSDecodingMode decoding_mode = kIgnoreDecodingMode;
+
+  if (version_info.has_decoding_mode)
+    decoding_mode = static_cast<EMSSDecodingMode>(config.decoding_mode);
+
   return {{config.mime_type.c_str(), config.extradata.size(),
-           config.extradata.data()},
+           config.extradata.data(), decoding_mode},
           static_cast<EMSSSampleFormat>(config.sample_format),
           static_cast<EMSSChannelLayout>(config.channel_layout),
           config.samples_per_second};
 }
 
 ::EMSSElementaryVideoTrackConfig ConfigToCAPI(
-    const ElementaryVideoTrackConfig& config) {
+    const ElementaryVideoTrackConfig& config,
+    const EmssVersionInfo& version_info) {
+  EMSSDecodingMode decoding_mode = kIgnoreDecodingMode;
+
+  if (version_info.has_decoding_mode)
+    decoding_mode = static_cast<EMSSDecodingMode>(config.decoding_mode);
+
   return {{config.mime_type.c_str(), config.extradata.size(),
-           config.extradata.data()},
+           config.extradata.data(), decoding_mode},
           config.width,
           config.height,
           config.framerate_num,
@@ -49,11 +63,12 @@ void OnPlaybackPositionChangedListenerCallback(float new_time,
 }
 
 void OnClosedCaptionsListenerCallback(const uint8_t* closed_captions,
-                              uint32_t captions_length,
-                              void* user_data) {
+                                      uint32_t captions_length,
+                                      void* user_data) {
   const auto listener =
       static_cast<ElementaryMediaStreamSourceListener*>(user_data);
-  listener->OnClosedCaptions(closed_captions, static_cast<size_t>(captions_length));
+  listener->OnClosedCaptions(closed_captions,
+                             static_cast<size_t>(captions_length));
 }
 
 }  // namespace
@@ -103,29 +118,78 @@ bool ElementaryMediaStreamSource::IsValid() const {
 
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config) {
-  auto CAPIConfig = ConfigToCAPI(config);
+  using TrackType = ElementaryMediaTrack::TrackType;
+  auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
-  auto track = ElementaryMediaTrack{result.value, version_info_,
-                                    use_session_id_emulation_};
+  auto track = ElementaryMediaTrack{result.value, TrackType::kAudio,
+                                    version_info_, use_session_id_emulation_};
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
   return {std::move(track), OperationResult::kSuccess};
 }
 
+Result<void> ElementaryMediaStreamSource::AddTrack(
+    const ElementaryAudioTrackConfig& config,
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  using TrackType = ElementaryMediaTrack::TrackType;
+  if (!version_info_.has_decoding_mode) {
+    // fallback to synchronous add track in case of missing async add track
+    // functionality on a platform
+    auto result = AddTrack(config);
+    if (result.operation_result != OperationResult::kSuccess)
+      return {result.operation_result};
+
+    on_finished_callback(result.operation_result, std::move(result.value));
+    return {result.operation_result};
+  }
+
+  const auto CAPIConfig = ConfigToCAPI(config, version_info_);
+
+  return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
+                                            EMSSOperationResult>(
+      EMSSAddAudioTrackAsync, handle_, &CAPIConfig,
+      GetOnAddTrackDoneCb(TrackType::kAudio, on_finished_callback));
+}
+
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryVideoTrackConfig& config) {
-  // TODO(p.balut): remove duplciated code
-  auto CAPIConfig = ConfigToCAPI(config);
+  using TrackType = ElementaryMediaTrack::TrackType;
+  // TODO(p.balut): remove duplicated code
+  auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddVideoTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
-  auto track = ElementaryMediaTrack{result.value, version_info_,
-                                    use_session_id_emulation_};
+  auto track = ElementaryMediaTrack{result.value, TrackType::kVideo,
+                                    version_info_, use_session_id_emulation_};
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
   return {std::move(track), OperationResult::kSuccess};
+}
+
+Result<void> ElementaryMediaStreamSource::AddTrack(
+    const ElementaryVideoTrackConfig& config,
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  using TrackType = ElementaryMediaTrack::TrackType;
+  if (!version_info_.has_decoding_mode) {
+    // fallback to synchronous add track in case of missing async add track
+    // functionality on a platform
+    auto result = AddTrack(config);
+    if (result.operation_result != OperationResult::kSuccess)
+      return {result.operation_result};
+
+    on_finished_callback(result.operation_result, std::move(result.value));
+    return {result.operation_result};
+  }
+
+  const auto CAPIConfig = ConfigToCAPI(config, version_info_);
+  return CAPIAsyncCallWithArgAndReturnParam<OperationResult, int32_t,
+                                            EMSSOperationResult>(
+      EMSSAddVideoTrackAsync, handle_, &CAPIConfig,
+      GetOnAddTrackDoneCb(TrackType::kVideo, on_finished_callback));
 }
 
 Result<void> ElementaryMediaStreamSource::RemoveTrack(
@@ -138,15 +202,15 @@ Result<void> ElementaryMediaStreamSource::Flush() {
 }
 
 Result<void> ElementaryMediaStreamSource::Close(
-    std::function<void(OperationResult)>on_finished_callback) {
-  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
-                                                     EMSSClose, handle_);
+    std::function<void(OperationResult)> on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(
+      on_finished_callback, EMSSClose, handle_);
 }
 
 Result<void> ElementaryMediaStreamSource::Open(
-    std::function<void(OperationResult)>on_finished_callback) {
-  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(on_finished_callback,
-                                                     EMSSOpen, handle_);
+    std::function<void(OperationResult)> on_finished_callback) {
+  return CAPIAsyncCall<OperationResult, EMSSOperationResult>(
+      on_finished_callback, EMSSOpen, handle_);
 }
 
 Result<Seconds> ElementaryMediaStreamSource::GetDuration() const {
@@ -205,6 +269,31 @@ void ElementaryMediaStreamSource::SetHTMLMediaElement(
   html_media_element_ = html_media_element;
 }
 
+std::function<void(OperationResult, int32_t handle)>
+ElementaryMediaStreamSource::GetOnAddTrackDoneCb(
+    ElementaryMediaTrack::TrackType type,
+    std::function<void(OperationResult, ElementaryMediaTrack)>
+        on_finished_callback) {
+  auto cb = [this, on_finished_callback, type](OperationResult result,
+                                               int32_t handle) {
+    if (result != OperationResult::kSuccess) {
+      on_finished_callback(result, ElementaryMediaTrack{});
+      return;
+    }
+
+    auto track = ElementaryMediaTrack{handle, type, version_info_,
+                                      use_session_id_emulation_};
+    if (!track.IsValid()) {
+      on_finished_callback(OperationResult::kFailed, ElementaryMediaTrack{});
+      return;
+    }
+
+    on_finished_callback(OperationResult::kSuccess, std::move(track));
+  };
+
+  return cb;
+}
+
 OperationResult ElementaryMediaStreamSource::SetListenerInternal(
     ElementaryMediaStreamSourceListener* listener) {
   if (listener) {
@@ -250,14 +339,8 @@ OperationResult ElementaryMediaStreamSource::SetListenerInternal(
     if (version_info_.has_legacy_emss) {
       if (html_media_element_)
         html_media_element_->UnregisterOnTimeUpdateEMSS(handle_);
-    } else {
-      LISTENER_OP(EMSSUnsetOnPlaybackPositionChanged, handle_);
     }
-    LISTENER_OP(EMSSUnsetOnSourceDetached, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceClosed, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceOpenPending, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceOpen, handle_);
-    LISTENER_OP(EMSSUnsetOnSourceEnded, handle_);
+    LISTENER_OP(EMSSClearListeners, handle_);
   }
   return OperationResult::kSuccess;
 }

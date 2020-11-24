@@ -83,13 +83,13 @@ typedef struct EMSSElementaryAudioTrackConfig {
 } EMSSElementaryAudioTrackConfig;
 
 static_assert(
-    offsetof(EMSSElementaryAudioTrackConfig, sample_format) == 12,
+    offsetof(EMSSElementaryAudioTrackConfig, sample_format) == 16,
     "EMSSElementaryAudioTrackConfig::sample_format has wrong alignment");
 static_assert(
-    offsetof(EMSSElementaryAudioTrackConfig, channel_layout) == 16,
+    offsetof(EMSSElementaryAudioTrackConfig, channel_layout) == 20,
     "EMSSElementaryAudioTrackConfig::channel_layout has wrong alignment");
 static_assert(
-    offsetof(EMSSElementaryAudioTrackConfig, samples_per_second) == 20,
+    offsetof(EMSSElementaryAudioTrackConfig, samples_per_second) == 24,
     "EMSSElementaryAudioTrackConfig::samples_per_second has wrong alignment");
 
 #ifdef __cplusplus

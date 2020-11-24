@@ -565,7 +565,7 @@ var LibraryGL = {
       } else {
 #endif
 
-      var ctx = 
+      var ctx =
 #if USE_WEBGL2
         (webGLContextAttributes.majorVersion > 1)
         ?
@@ -973,8 +973,8 @@ var LibraryGL = {
 
     deleteContext: function(contextHandle) {
       if (GL.currentContext === GL.contexts[contextHandle]) GL.currentContext = null;
-      if (typeof JSEvents === 'object') JSEvents.removeAllHandlersOnTarget(GL.contexts[contextHandle].GLctx.canvas); // Release all JS event handlers on the DOM element that the GL context is associated with since the context is now deleted.
-      if (GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx.canvas) GL.contexts[contextHandle].GLctx.canvas.GLctxObject = undefined; // Make sure the canvas object no longer refers to the context object so there are no GC surprises.
+      if (typeof JSEvents === 'object' && GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx) JSEvents.removeAllHandlersOnTarget(GL.contexts[contextHandle].GLctx.canvas); // Release all JS event handlers on the DOM element that the GL context is associated with since the context is now deleted.
+      if (GL.contexts[contextHandle] && GL.contexts[contextHandle].GLctx && GL.contexts[contextHandle].GLctx.canvas) GL.contexts[contextHandle].GLctx.canvas.GLctxObject = undefined; // Make sure the canvas object no longer refers to the context object so there are no GC surprises.
       _free(GL.contexts[contextHandle]);
       GL.contexts[contextHandle] = null;
     },

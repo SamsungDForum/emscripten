@@ -5,6 +5,7 @@
 
 #include "samsung/wasm/elementary_media_track.h"
 
+#include <emscripten/threading.h>
 #include <atomic>
 #include <chrono>
 #include <type_traits>
@@ -23,18 +24,29 @@
 
 namespace {
 
+using TrackType = samsung::wasm::ElementaryMediaTrack::TrackType;
+
 ::EMSSElementaryMediaPacket PacketToCAPI(
-    const samsung::wasm::ElementaryMediaPacket& packet) {
-  return {
+    const samsung::wasm::ElementaryMediaPacket& packet,
+    TrackType type) {
+  auto result = ::EMSSElementaryMediaPacket{
       packet.pts.count(),   packet.dts.count(), packet.duration.count(),
       packet.is_key_frame,  packet.data_size,   packet.data,
       packet.width,         packet.height,      packet.framerate_num,
       packet.framerate_den, packet.session_id,
   };
+  if (type == TrackType::kAudio) {
+    result.framerate_num = 0;
+    result.framerate_den = 0;
+    result.width = 0;
+    result.height = 0;
+  }
+  return result;
 }
 
 ::EMSSEncryptedElementaryMediaPacket PacketToCAPI(
-    const samsung::wasm::EncryptedElementaryMediaPacket& packet) {
+    const samsung::wasm::EncryptedElementaryMediaPacket& packet,
+    TrackType type) {
   // TODO(p.balut): A common structure should be used instead of a cast.
   static_assert(
       sizeof(EMSSEncryptedSubsampleDescription) ==
@@ -49,9 +61,9 @@ namespace {
           offsetof(samsung::wasm::EncryptedSubsampleDescription, cipher_block),
       "C++ API subsample description != JS bindings subsample description.");
 
-  EMSSElementaryMediaPacket base_packet = PacketToCAPI(
-      static_cast<const samsung::wasm::ElementaryMediaPacket&>(packet));
-  return {base_packet,
+  return {PacketToCAPI(
+              static_cast<const samsung::wasm::ElementaryMediaPacket&>(packet),
+              type),
           packet.subsamples.size(),
           reinterpret_cast<const EMSSEncryptedSubsampleDescription*>(
               packet.subsamples.data()),
@@ -78,9 +90,8 @@ void OnSeekListenerCallback(float new_time, void* user_data) {
       ->OnSeek(samsung::wasm::Seconds(new_time));
 }
 
-void OnAppendErrorListenerCallback(
-    EMSSOperationResult append_error,
-    void* user_data) {
+void OnAppendErrorListenerCallback(EMSSOperationResult append_error,
+                                   void* user_data) {
   using samsung::wasm::ElementaryMediaTrack;
   using samsung::wasm::ElementaryMediaTrackListener;
   (static_cast<ElementaryMediaTrackListener*>(user_data))
@@ -93,6 +104,8 @@ void OnAppendErrorListenerCallback(
 namespace samsung {
 namespace wasm {
 
+using ActiveDecodingMode = ElementaryMediaTrack::ActiveDecodingMode;
+
 /*============================================================================*/
 /*= samsung::wasm::ElementaryMediaTrack::Impl declaration                    =*/
 /*============================================================================*/
@@ -100,6 +113,7 @@ namespace wasm {
 class ElementaryMediaTrack::Impl {
  public:
   explicit Impl(int handle,
+                TrackType type,
                 EmssVersionInfo version_info,
                 bool use_session_id_emulation);
   Impl(const Impl&) = delete;
@@ -109,15 +123,19 @@ class ElementaryMediaTrack::Impl {
   ~Impl();
 
   bool IsValid() const;
+  TrackType GetType() const;
   Result<void> AppendPacket(const ElementaryMediaPacket& packet);
   Result<void> AppendPacketAsync(const ElementaryMediaPacket& packet);
   Result<void> AppendEncryptedPacket(const EncryptedElementaryMediaPacket&);
-  Result<void> AppendEncryptedPacketAsync(const EncryptedElementaryMediaPacket&);
+  Result<void> AppendEncryptedPacketAsync(
+      const EncryptedElementaryMediaPacket&);
   Result<void> AppendEndOfTrack(SessionId session_id);
   Result<void> AppendEndOfTrackAsync(SessionId session_id);
   Result<void> FillTextureWithNextFrame(
       GLuint texture_id,
       std::function<void(OperationResult)> finished_callback);
+  Result<void> FillTextureWithNextFrameSync(GLuint texture_id);
+  Result<ActiveDecodingMode> GetActiveDecodingMode() const;
   Result<SessionId> GetSessionId() const;
   Result<bool> IsOpen() const;
   Result<void> RecycleTexture(GLuint textureId);
@@ -146,6 +164,7 @@ class ElementaryMediaTrack::Impl {
 
   int handle_;
   ElementaryMediaTrackListener* listener_;
+  ElementaryMediaTrack::TrackType type_;
   EmssVersionInfo version_info_;
 
   // session id emulation for legacy mode: variables
@@ -158,10 +177,12 @@ class ElementaryMediaTrack::Impl {
 /*============================================================================*/
 
 ElementaryMediaTrack::Impl::Impl(int handle,
+                                 TrackType type,
                                  EmssVersionInfo version_info,
                                  bool use_session_id_emulation)
     : handle_(handle),
       listener_(nullptr),
+      type_(type),
       version_info_(version_info),
       emulated_session_id_(0),
       use_session_id_emulation_(use_session_id_emulation) {
@@ -181,6 +202,12 @@ ElementaryMediaTrack::Impl::~Impl() {
 
 bool ElementaryMediaTrack::Impl::IsValid() const {
   return IsHandleValid(handle_);
+}
+
+ElementaryMediaTrack::TrackType ElementaryMediaTrack::Impl::GetType() const {
+  if (!IsHandleValid(handle_))
+    return TrackType::kUnknown;
+  return type_;
 }
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacket(
@@ -287,10 +314,35 @@ Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrame(
   if (!version_info_.has_video_texture)
     return {OperationResult::kNotSupported};
 
-  return CAPIAsyncCallWithArg<
-      OperationResult, EMSSOperationResult, uint32_t>(
+  if (!emscripten_is_main_browser_thread())
+    return {OperationResult::kNotAllowedOnCurrentThread};
+
+  return CAPIAsyncCallWithArg<OperationResult, EMSSOperationResult, uint32_t>(
       elementaryMediaTrackFillTextureWithNextFrame, handle_, textureId,
       finishedCallback);
+}
+
+Result<void> ElementaryMediaTrack::Impl::FillTextureWithNextFrameSync(
+    GLuint textureId) {
+  if (!version_info_.has_video_texture)
+    return {OperationResult::kNotSupported};
+
+  if (emscripten_is_main_browser_thread())
+    return {OperationResult::kNotAllowedOnCurrentThread};
+
+  return CAPICall<void>(elementaryMediaTrackFillTextureWithNextFrameSync,
+                        handle_, textureId);
+}
+
+Result<ActiveDecodingMode> ElementaryMediaTrack::Impl::GetActiveDecodingMode()
+    const {
+  if (version_info_.has_decoding_mode) {
+    auto result = CAPICall<EMSSElementaryMediaTrackActiveDecodingMode>(
+        elementaryMediaTrackGetActiveDecodingMode, handle_);
+    return {static_cast<ActiveDecodingMode>(*result),
+            OperationResult::kSuccess};
+  }
+  return {ActiveDecodingMode::kHardware, OperationResult::kSuccess};
 }
 
 Result<SessionId> ElementaryMediaTrack::Impl::GetSessionId() const {
@@ -322,6 +374,8 @@ Result<void> ElementaryMediaTrack::Impl::RegisterCurrentGraphicsContext() {
 }
 
 Result<void> ElementaryMediaTrack::Impl::SetMediaKey(wasm::MediaKey* key) {
+  if (!key)
+    return {OperationResult::kInvalidArgument};
   return CAPICall<void>(elementaryMediaTrackSetMediaKey, handle_, key->handle_);
 }
 
@@ -348,7 +402,7 @@ Result<void> ElementaryMediaTrack::Impl::SetListener(
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
     const ElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -360,7 +414,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacketInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendPacketAsyncInternal(
     const ElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -372,7 +426,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendPacketAsyncInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
     const EncryptedElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -385,7 +439,7 @@ Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketInternal(
 
 Result<void> ElementaryMediaTrack::Impl::AppendEncryptedPacketAsyncInternal(
     const EncryptedElementaryMediaPacket& packet) {
-  auto capi_packet = PacketToCAPI(packet);
+  auto capi_packet = PacketToCAPI(packet, type_);
 
   if (version_info_.has_legacy_emss) {
     // Legacy EMSS didn't support session_id concept.
@@ -418,13 +472,7 @@ OperationResult ElementaryMediaTrack::Impl::SetListenerInternal(
           listener);
     }
   } else {
-    LISTENER_OP(elementaryMediaTrackUnsetOnTrackOpen, handle_);
-    LISTENER_OP(elementaryMediaTrackUnsetOnTrackClosed, handle_);
-    LISTENER_OP(elementaryMediaTrackUnsetOnSeek, handle_);
-
-    if (!version_info_.has_legacy_emss) {
-      LISTENER_OP(elementaryMediaTrackUnsetOnSessionIdChanged, handle_);
-    }
+    LISTENER_OP(elementaryMediaTrackClearListeners, handle_);
   }
   return OperationResult::kSuccess;
 }
@@ -462,9 +510,11 @@ void ElementaryMediaTrack::Impl::UnregisterSessionIdEmulationCallbacks() {
 ElementaryMediaTrack::ElementaryMediaTrack() = default;
 
 ElementaryMediaTrack::ElementaryMediaTrack(int handle,
+                                           TrackType type,
                                            EmssVersionInfo version_info,
                                            bool use_session_id_emulation)
     : pimpl_(std::make_unique<Impl>(handle,
+                                    type,
                                     version_info,
                                     use_session_id_emulation)) {}
 
@@ -479,6 +529,12 @@ bool ElementaryMediaTrack::IsValid() const {
   if (!pimpl_)
     return false;
   return pimpl_->IsValid();
+}
+
+ElementaryMediaTrack::TrackType ElementaryMediaTrack::GetType() const {
+  if (!pimpl_)
+    return TrackType::kUnknown;
+  return pimpl_->GetType();
 }
 
 Result<void> ElementaryMediaTrack::AppendPacket(
@@ -528,6 +584,19 @@ Result<void> ElementaryMediaTrack::FillTextureWithNextFrame(
     return {OperationResult::kInvalidObject};
   return pimpl_->FillTextureWithNextFrame(texture_id,
                                           std::move(finished_callback));
+}
+
+Result<void> ElementaryMediaTrack::FillTextureWithNextFrameSync(
+    GLuint texture_id) {
+  if (!pimpl_)
+    return {OperationResult::kInvalidObject};
+  return pimpl_->FillTextureWithNextFrameSync(texture_id);
+}
+
+Result<ActiveDecodingMode> ElementaryMediaTrack::GetActiveDecodingMode() const {
+  if (!pimpl_)
+    return {ActiveDecodingMode::kHardware, OperationResult::kInvalidObject};
+  return pimpl_->GetActiveDecodingMode();
 }
 
 Result<SessionId> ElementaryMediaTrack::GetSessionId() const {

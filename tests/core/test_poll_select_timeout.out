@@ -1,0 +1,23 @@
+testSelectMain timeout 3s: OK
+testPollMain timeout 3s: OK
+testSelectTwoThreads timeout 3s: OK
+testPollTwoThreads timeout 3s: OK
+testManyCalls timeout 3s: OK
+
+testSelectMain timeout 0s: OK
+testPollMain timeout 0s: OK
+testSelectTwoThreads timeout 0s: OK
+testPollTwoThreads timeout 0s: OK
+testManyCalls timeout 0s: OK
+
+testSelectMain timeout 500ms: OK
+testPollMain timeout 500ms: OK
+testSelectTwoThreads timeout 500ms: OK
+testPollTwoThreads timeout 500ms: OK
+testManyCalls timeout 500ms: OK
+
+testSelectMain timeout NULL: OK
+testPollMain timeout NULL: OK
+testSelectTwoThreads timeout NULL: OK
+testPollTwoThreads timeout NULL: OK
+testManyCalls timeout NULL: OK

@@ -28,15 +28,19 @@ typedef enum EMSSElementaryMediaTrackCloseReason {
   ElementaryMediaTrackCloseReasonUnknown,
 } EMSSElementaryMediaTrackCloseReason;
 
+typedef enum EMSSElementaryMediaTrackActiveDecodingMode {
+  ElementaryMediaTrackDecodingModeHardware = 0,
+  ElementaryMediaTrackDecodingModeSoftware,
+} EMSSElementaryMediaTrackActiveDecodingMode;
+
 typedef void (*OnTrackOpenCallback)(void* userData);
 typedef void (*OnTrackClosedCallback)(
     EMSSElementaryMediaTrackCloseReason reason,
     void* userData);
 typedef void (*OnTrackSeekCallback)(float newTime, void* userData);
 typedef void (*OnSessionIdChangedCallback)(int32_t sessionId, void* userData);
-typedef void (*OnAppendErrorCallback)(
-    EMSSOperationResult appendError,
-    void* userData);
+typedef void (*OnAppendErrorCallback)(EMSSOperationResult appendError,
+                                      void* userData);
 
 extern EMSSOperationResult elementaryMediaTrackRemove(int handle);
 extern EMSSOperationResult elementaryMediaTrackAppendPacket(
@@ -60,10 +64,14 @@ extern EMSSOperationResult elementaryMediaTrackAppendEndOfTrackAsync(
 extern EMSSOperationResult elementaryMediaTrackFillTextureWithNextFrame(
     int handle,
     uint32_t textureId,
-    void (*finishedCallback)(
-        EMSSOperationResult result,
-        void* userData),
+    void (*finishedCallback)(EMSSOperationResult result, void* userData),
     void* userData);
+extern EMSSOperationResult elementaryMediaTrackFillTextureWithNextFrameSync(
+    int handle,
+    uint32_t textureId);
+extern EMSSOperationResult elementaryMediaTrackGetActiveDecodingMode(
+    int handle,
+    EMSSElementaryMediaTrackActiveDecodingMode* activeDecodingMode);
 extern EMSSOperationResult elementaryMediaTrackGetSessionId(int handle,
                                                             int32_t* sessionId);
 extern EMSSOperationResult elementaryMediaTrackIsOpen(int handle, bool* isOpen);
@@ -75,32 +83,29 @@ extern EMSSOperationResult elementaryMediaTrackRegisterCurrentGraphicsContext(
 extern EMSSOperationResult elementaryMediaTrackSetMediaKey(
     int handle,
     int media_key_handle);
+
+extern EMSSOperationResult elementaryMediaTrackClearListeners(int handle);
+
 extern EMSSOperationResult elementaryMediaTrackSetOnAppendError(
     int handle,
     OnAppendErrorCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnAppendError(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackOpen(
     int handle,
     OnTrackOpenCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackOpen(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnTrackClosed(
     int handle,
     OnTrackClosedCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnTrackClosed(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSeek(
     int handle,
     OnTrackSeekCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnSeek(int handle);
 extern EMSSOperationResult elementaryMediaTrackSetOnSessionIdChanged(
     int handle,
     OnSessionIdChangedCallback callback,
     void* userData);
-extern EMSSOperationResult elementaryMediaTrackUnsetOnSessionIdChanged(
-    int handle);
 
 extern EMSSOperationResult
 elementaryMediaTrackSetListenersForSessionIdEmulation(int handle,

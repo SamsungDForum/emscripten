@@ -31,8 +31,8 @@ enum class OperationResult {
   /// A listener passed as an argument not assigned to this object.
   kNoSuchListener,
 
-  /// Performing requested operation is not allowed.
-  kNotAllowed,
+  /// Performing requested operation is not allowed on the current thread.
+  kNotAllowedOnCurrentThread,
 
   /// This functionality is not supported on this device.
   ///
@@ -41,8 +41,8 @@ enum class OperationResult {
   /// features available on this device.
   kNotSupported,
 
-  /// The requested operation cannot be performed because player was already
-  /// destroyed.
+  /// The requested operation cannot be performed because this object was
+  /// already destroyed.
   kAlreadyDestroyed,
 
   /// The requested operation is already in progress and cannot be requested
@@ -237,6 +237,13 @@ enum class OperationResult {
   /// `ElementaryMediaStreamSource::Mode::kVideoTexture`
   /// @sa `ElementaryMediaStreamSource::Mode`
   kVideoDecoderNotInVideoTextureMode,
+
+  /// Performing requested operation is not allowed on the current thread.
+  ///
+  /// @deprecated
+  /// Replaced by `kNotAllowedOnCurrentThread` for clarity, but can be used
+  /// interchangeably.
+  kNotAllowed = kNotAllowedOnCurrentThread,
 };
 
 }  // namespace wasm

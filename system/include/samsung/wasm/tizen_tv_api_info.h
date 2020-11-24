@@ -18,17 +18,33 @@ struct TizenTVApiInfo {
   /// A name of the TizenTV WASM API.
   const std::string name;
 
-  /// API version in format: major.minor
+  /// API version. Usually, it has the following format:
+  ///
+  /// ```
+  /// (api level).(wasm)/(component)/(subcomponent A)-...-(subcomponent N)
+  /// ```
+  ///
+  /// ...where `api level` is a number, and `wasm`/`component`/`subcomponent`
+  /// are hashes.
+  /// Subcomponent part is optional.
   ///
   /// @remarks
   /// version is composed of:
-  /// - major number: highest supported API level,
-  /// - minor number: detailed implementation version.
+  /// - `api level`: highest supported API level,
+  /// - `wasm`, `component`, `subcomponent`: detailed implementation version.
+  ///
+  /// @note
+  /// Older Tizen TV WASM implementations used simple format in the form of
+  /// `(api level).(detailed implementation version)` (both values were
+  /// numbers).
   const std::string version;
 
   /// Each API level represents a single version of the API. This vector
   /// contains all API versions supported by this platform.
   const std::vector<uint32_t> api_levels;
+
+  /// Returns a list of supported API-specific features.
+  const std::vector<std::string> features;
 };  // struct TizenTVApiInfo
 
 }  // namespace wasm

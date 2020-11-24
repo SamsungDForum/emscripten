@@ -292,11 +292,37 @@ class ElementaryMediaStreamSource final {
   /// to `OperationResult::kSuccess` and a valid `ElementaryMediaTrack` object
   /// on success, otherwise a code describing the error.
   ///
+  /// @deprecated since version 3.0
+  /// This version has no support for reporting errors in case of not available
+  /// hardware decoder. Please use AddTrack with callback instead.
+  ///
   /// @remarks
   /// - Tracks can only be added in `kClosed` state.
   /// - Only one track of each type can be held by the source at any given time.
   /// - Audio parameters cannot be changed during the lifetime of the track.
   Result<ElementaryMediaTrack> AddTrack(const ElementaryAudioTrackConfig&);
+
+  /// Asynchronously adds an audio track to the source.
+  ///
+  /// @param[in] config A config describing track.
+  ///
+  /// @param[in] on_finished_callback A callback notifying end of
+  /// `AddTrack()`. The callback receives `OperationResult` informing of
+  /// the result of the operation and `ElementaryMediaTrack` object - invalid
+  /// in case of operation failure.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @remarks
+  /// - Tracks can only be added in `kClosed` state.
+  /// - Only one track of each type can be held by the source at any given time.
+  /// - Audio parameters cannot be changed during the lifetime of the track.
+  Result<void> AddTrack(
+      const ElementaryAudioTrackConfig&,
+      std::function<void(OperationResult, ElementaryMediaTrack)>
+          on_finished_callback);
 
   /// Adds a video track to the source.
   ///
@@ -306,6 +332,10 @@ class ElementaryMediaStreamSource final {
   /// to `OperationResult::kSuccess` and a valid `ElementaryMediaTrack` object
   /// on success, otherwise a code describing the error.
   ///
+  /// @deprecated since version 3.0
+  /// This version has no support for reporting errors in case of not available
+  /// hardware decoder. Please use AddTrack with callback instead.
+  ///
   /// @remarks
   /// - Tracks can only be added in `kClosed` state.
   /// - Only one track of each type can be held by the source at any given time.
@@ -313,6 +343,30 @@ class ElementaryMediaStreamSource final {
   ///   playback, notably resolution or framerate, by passing packets with new
   ///   resolution/fps values.
   Result<ElementaryMediaTrack> AddTrack(const ElementaryVideoTrackConfig&);
+
+  /// Asynchronously adds a video track to the source.
+  ///
+  /// @param[in] config A config describing track.
+  ///
+  /// @param[in] on_finished_callback A callback notifying end of
+  /// `AddTrack()`. The callback receives `OperationResult` informing of
+  /// the result of the operation and `ElementaryMediaTrack` object - invalid
+  /// in case of operation failure.
+  ///
+  /// @return `Result<void>` with `operation_result` field set to
+  /// `OperationResult::kSuccess` on success, otherwise a code describing the
+  /// error.
+  ///
+  /// @remarks
+  /// - Tracks can only be added in `kClosed` state.
+  /// - Only one track of each type can be held by the source at any given time.
+  /// - As opposed to audio track, some video parameters can change during
+  ///   playback, notably resolution or framerate, by passing packets with new
+  ///   resolution/fps values.
+  Result<void> AddTrack(
+      const ElementaryVideoTrackConfig&,
+      std::function<void(OperationResult, ElementaryMediaTrack)>
+          on_finished_callback);
 
   /// Removes a track from the source. After the operation removed track is
   /// still valid and can be re-added to the source again.
@@ -424,6 +478,10 @@ class ElementaryMediaStreamSource final {
   const char* GetURL() const;
 
  private:
+  std::function<void(OperationResult, int32_t handle)> GetOnAddTrackDoneCb(
+      ElementaryMediaTrack::TrackType type,
+      std::function<void(OperationResult, ElementaryMediaTrack)>
+          on_finished_callback);
   void SetHTMLMediaElement(html::HTMLMediaElement*);
   OperationResult SetListenerInternal(
       ElementaryMediaStreamSourceListener* listener);

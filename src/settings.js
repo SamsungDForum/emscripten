@@ -882,7 +882,7 @@ var LINKABLE = 0;
 // [compile+link]
 var STRICT = 0;
 
-// Automatically attempt to add archive indexes at link time to archives that 
+// Automatically attempt to add archive indexes at link time to archives that
 // don't already have them.  This can heppen when GNU ar or GNU ranlib is used
 // rather than `llvm-ar` or `emar` since the former don't understand the wasm
 // object format.
@@ -1529,6 +1529,9 @@ var EMIT_EMSCRIPTEN_METADATA = 0;
 
 // If set to 1, toolchain will use custom Tizen WebAPIs
 var ENVIRONMENT_MAY_BE_TIZEN = 1;
+
+// If true, library_tizen_emss will log extra debug information.
+var TIZEN_EMSS_DEBUG = 0;
 
 // If set to 1, all JS libraries will be automaticially available at link time.
 // This gets set to 0 in STRICT mode (or with MINIMAL_RUNTIME) which mean you

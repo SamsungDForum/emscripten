@@ -35,8 +35,13 @@ typedef void (*OnPlaybackPositionChangedCallback)(float newTime,
                                                   void* userData);
 typedef void (*OnOperationDoneCallback)(EMSSOperationResult result,
                                         void* userData);
-typedef void (*OnClosedCaptionsListenerCallback)(
-    const uint8_t* closed_captions, uint32_t captions_length, void* user_data);
+typedef void (*OnClosedCaptionsListenerCallback)(const uint8_t* closedCaptions,
+                                                 uint32_t captionsLength,
+                                                 void* userData);
+
+typedef void (*OnAddTrackDone)(EMSSOperationResult result,
+                               int outTrackHandle,
+                               void* userData);
 
 extern int EMSSCreate(EMSSMode latencyMode);
 extern EMSSOperationResult EMSSRemove(int handle);
@@ -46,10 +51,20 @@ extern EMSSOperationResult EMSSAddAudioTrack(
     int handle,
     const EMSSElementaryAudioTrackConfig* config,
     int* outTrackHandle);
+extern EMSSOperationResult EMSSAddAudioTrackAsync(
+    int handle,
+    const EMSSElementaryAudioTrackConfig* config,
+    OnAddTrackDone finishedCallback,
+    void* userData);
 extern EMSSOperationResult EMSSAddVideoTrack(
     int handle,
     const EMSSElementaryVideoTrackConfig* config,
     int* outTrackHandle);
+extern EMSSOperationResult EMSSAddVideoTrackAsync(
+    int handle,
+    const EMSSElementaryVideoTrackConfig* config,
+    OnAddTrackDone finishedCallback,
+    void* userData);
 extern EMSSOperationResult EMSSRemoveTrack(int handle, int trackHandle);
 extern EMSSOperationResult EMSSFlush(int handle);
 extern EMSSOperationResult EMSSClose(int handle,
@@ -63,38 +78,33 @@ extern EMSSOperationResult EMSSSetDuration(int handle, double newDuration);
 extern EMSSOperationResult EMSSGetMode(int handle, EMSSMode* out);
 extern EMSSOperationResult EMSSGetReadyState(int handle, EMSSReadyState* out);
 
+extern EMSSOperationResult EMSSClearListeners(int handle);
+
 extern EMSSOperationResult EMSSSetOnSourceDetached(int handle,
                                                    OnEventCallback callback,
                                                    void* userData);
-extern EMSSOperationResult EMSSUnsetOnSourceDetached(int handle);
 extern EMSSOperationResult EMSSSetOnSourceClosed(int handle,
                                                  OnEventCallback callback,
                                                  void* userData);
-extern EMSSOperationResult EMSSUnsetOnSourceClosed(int handle);
 extern EMSSOperationResult EMSSSetOnSourceOpenPending(int handle,
                                                       OnEventCallback callback,
                                                       void* userData);
-extern EMSSOperationResult EMSSUnsetOnSourceOpenPending(int handle);
 extern EMSSOperationResult EMSSSetOnSourceOpen(int handle,
                                                OnEventCallback callback,
                                                void* userData);
-extern EMSSOperationResult EMSSUnsetOnSourceOpen(int handle);
 extern EMSSOperationResult EMSSSetOnSourceEnded(int handle,
                                                 OnEventCallback callback,
                                                 void* userData);
-extern EMSSOperationResult EMSSUnsetOnSourceEnded(int handle);
 
 extern EMSSOperationResult EMSSSetOnPlaybackPositionChanged(
     int handle,
     OnPlaybackPositionChangedCallback callback,
     void* userData);
-extern EMSSOperationResult EMSSUnsetOnPlaybackPositionChanged(int handle);
 
 extern EMSSOperationResult EMSSSetOnClosedCaptions(
     int handle,
     OnClosedCaptionsListenerCallback callback,
     void* userData);
-extern EMSSOperationResult EMSSUnsetOnClosedCaptions(int handle);
 
 #ifdef __cplusplus
 }

@@ -415,7 +415,7 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 #define HAVE_FCNTL_H 1
 
 /* Define to 1 if you have a working fcntl O_NONBLOCK function. */
-#define HAVE_FCNTL_O_NONBLOCK 1
+/* #undef HAVE_FCNTL_O_NONBLOCK */
 
 /* Define to 1 if you have the fdopen function. */
 /* #undef HAVE_FDOPEN */
@@ -587,7 +587,7 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* #undef HAVE_IOCTLSOCKET_FIONBIO */
 
 /* Define to 1 if you have a working ioctl FIONBIO function. */
-#define HAVE_IOCTL_FIONBIO 1
+/* #undef HAVE_IOCTL_FIONBIO */
 
 /* Define to 1 if you have a working ioctl SIOCGIFADDR function. */
 #define HAVE_IOCTL_SIOCGIFADDR 1
@@ -1185,7 +1185,7 @@ curl_config_h = '''/* lib/curl_config.h.in.  Generated somehow by cmake.  */
 /* #undef USE_THREADS_WIN32 */
 
 /* Define to disable non-blocking sockets. */
-/* #undef USE_BLOCKING_SOCKETS */
+#define USE_BLOCKING_SOCKETS 1
 
 /* if GnuTLS is enabled */
 /* #undef USE_GNUTLS */

@@ -454,6 +454,11 @@ var SyscallsLibrary = {
   },
   __syscall41: function(which, varargs) { // dup
     var old = SYSCALLS.getStreamFromFD();
+#if ENVIRONMENT_MAY_BE_TIZEN
+    if (SOCKFS.hasSocket(old.fd)) {
+      abort("Duplication of socket descriptor is not supported");
+    }
+#endif
     return FS.open(old.path, old.flags, 0).fd;
   },
   __syscall42__deps: ['$PIPEFS'],
@@ -547,6 +552,11 @@ var SyscallsLibrary = {
   __syscall63: function(which, varargs) { // dup2
     var old = SYSCALLS.getStreamFromFD(), suggestFD = SYSCALLS.get();
     if (old.fd === suggestFD) return suggestFD;
+#if ENVIRONMENT_MAY_BE_TIZEN
+    if (SOCKFS.hasSocket(old.fd)) {
+      abort("Duplication of socket descriptor is not supported");
+    }
+#endif
     return SYSCALLS.doDup(old.path, old.flags, suggestFD);
   },
   __syscall64__deps: ['$PROCINFO'],
@@ -602,7 +612,7 @@ var SyscallsLibrary = {
   },
 #if PROXY_POSIX_SOCKETS == 0
 #if ENVIRONMENT_MAY_BE_TIZEN
-  __syscall102__deps: ['$SOCKFS', '$DNS', '_read_sockaddr', '_write_sockaddr', '_getSocketBuffer', '_createSocketOnRenderThread', '_closeSocketOnRenderThread', '_cloneSocketFromRenderThread'],
+  __syscall102__deps: ['$SOCKFS', '$DNS', '_read_sockaddr', '_write_sockaddr', '_createSocketOnRenderThread', '_closeSocketOnRenderThread', '_cloneSocketFromRenderThread'],
 #else
   __syscall102__deps: ['$SOCKFS', '$DNS', '_read_sockaddr', '_write_sockaddr'],
 #endif
@@ -737,7 +747,7 @@ var SyscallsLibrary = {
       case 12: { // recvfrom
         var sock = getSocketFromFD(), buf = SYSCALLS.get(), len = SYSCALLS.get(), flags = SYSCALLS.get(), addr = SYSCALLS.get(), addrlen = SYSCALLS.get();
 #if ENVIRONMENT_MAY_BE_TIZEN
-        return sock.sock_ops.recvfrom(sock.sock_fd, buf, len, flags, addr, addrlen);
+        return sock.sock_ops.recvfrom(sock, buf, len, flags, addr, addrlen);
 #else
         var msg = sock.sock_ops.recvmsg(sock, len);
         if (!msg) return 0; // socket is closed
@@ -822,7 +832,7 @@ var SyscallsLibrary = {
       case 17: { // recvmsg
         var sock = getSocketFromFD(), message = SYSCALLS.get(), flags = SYSCALLS.get();
 #if ENVIRONMENT_MAY_BE_TIZEN
-        return sock.sock_ops.recvmsg(sock.sock_fd, message, flags);
+        return sock.sock_ops.recvmsg(sock, message, flags);
 #else
         var iov = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iov, 'i8*') }}};
         var num = {{{ makeGetValue('message', C_STRUCTS.msghdr.msg_iovlen, 'i32') }}};
@@ -1319,6 +1329,11 @@ var SyscallsLibrary = {
         if (arg < 0) {
           return -{{{ cDefine('EINVAL') }}};
         }
+#if ENVIRONMENT_MAY_BE_TIZEN
+        if (SOCKFS.hasSocket(stream.fd)) {
+          abort("Duplication of socket descriptor is not supported");
+        }
+#endif
         var newStream;
         newStream = FS.open(stream.path, stream.flags, 0, arg);
         return newStream.fd;
@@ -1329,6 +1344,11 @@ var SyscallsLibrary = {
       case {{{ cDefine('F_GETFL') }}}:
         return stream.flags;
       case {{{ cDefine('F_SETFL') }}}: {
+#if ENVIRONMENT_MAY_BE_TIZEN && SOCKET_HOST_BINDINGS
+        if (SOCKFS.hasSocket(stream.fd)) {
+          abort("Calling fcntl with F_SETFL command on socket is not supported");
+        }
+#endif
         var arg = SYSCALLS.get();
         stream.flags |= arg;
         return 0;
@@ -1549,6 +1569,11 @@ var SyscallsLibrary = {
     assert(!flags);
 #endif
     if (old.fd === suggestFD) return -{{{ cDefine('EINVAL') }}};
+#if ENVIRONMENT_MAY_BE_TIZEN
+    if (SOCKFS.hasSocket(old.fd)) {
+      abort("Duplication of socket descriptor is not supported");
+    }
+#endif
     return SYSCALLS.doDup(old.path, old.flags, suggestFD);
   },
   __syscall331: function(which, varargs) { // pipe2

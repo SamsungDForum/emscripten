@@ -10,7 +10,26 @@ static int dummy(int fd)
 
 weak_alias(dummy, __aio_close);
 
-int close(int fd)
+#ifdef __EMSCRIPTEN__
+#include "emscripten_fd.h"
+#include "socket_host.h"
+
+int close_with_socket_check(int fd)
+{
+	if (is_socket(fd)) {
+		return wasm_close(fd);
+	}
+	return normal_close(fd);
+}
+
+int close(int fd) {
+	return close_internal(fd);
+}
+
+int normal_close(int fd)
+#else
+int close(int fd) {
+#endif  // __EMSCRIPTEN__
 {
 	fd = __aio_close(fd);
 #ifdef __EMSCRIPTEN__

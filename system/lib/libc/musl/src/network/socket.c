@@ -3,7 +3,18 @@
 #include <errno.h>
 #include "syscall.h"
 
+#ifdef __EMSCRIPTEN__
+#include "socket_host.h"
+
 int socket(int domain, int type, int protocol)
+{
+	return socket_internal(domain, type, protocol);
+}
+
+int normal_socket(int domain, int type, int protocol)
+#else
+int socket(int domain, int type, int protocol)
+#endif  // __EMSCRIPTEN__
 {
 	int s = socketcall(socket, domain, type, protocol, 0, 0, 0);
 	if (s<0 && (errno==EINVAL || errno==EPROTONOSUPPORT)

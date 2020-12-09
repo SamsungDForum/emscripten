@@ -5,7 +5,40 @@
 #include "syscall.h"
 #include "libc.h"
 
+#ifdef __EMSCRIPTEN__
+#include "emscripten_fd.h"
+#include "socket_host.h"
+
+static int only_sockets(int nfds, fd_set *fds)
+{
+	if (fds) {
+		for (int i = 0; i < nfds; ++i) {
+			if (FD_ISSET(i, fds) && !is_socket(i)) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+
+int select_with_socket_check(int n, fd_set *restrict rfds, fd_set *restrict wfds, fd_set *restrict efds, struct timeval *restrict tv)
+{
+	if (only_sockets(n, rfds) && only_sockets(n, wfds)
+	    && only_sockets(n, efds)) {
+		return wasm_select(n, rfds, wfds, efds, tv);
+	}
+	return normal_select(n, rfds, wfds, efds, tv);
+}
+
 int select(int n, fd_set *restrict rfds, fd_set *restrict wfds, fd_set *restrict efds, struct timeval *restrict tv)
+{
+	return select_internal(n, rfds, wfds, efds, tv);
+}
+
+int normal_select(int n, fd_set *restrict rfds, fd_set *restrict wfds, fd_set *restrict efds, struct timeval *restrict tv)
+#else
+int select(int n, fd_set *restrict rfds, fd_set *restrict wfds, fd_set *restrict efds, struct timeval *restrict tv)
+#endif  // __EMSCRIPTEN__
 {
 #ifdef SYS_select
 	return syscall_cp(SYS_select, n, rfds, wfds, efds, tv);

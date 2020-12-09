@@ -5,7 +5,18 @@
 #include "syscall.h"
 #include "libc.h"
 
+#ifdef __EMSCRIPTEN__
+#include "socket_host.h"
+
 int accept4(int fd, struct sockaddr *restrict addr, socklen_t *restrict len, int flg)
+{
+	return accept4_internal(fd, addr, len, flg);
+}
+
+int normal_accept4(int fd, struct sockaddr *restrict addr, socklen_t *restrict len, int flg)
+#else
+int accept4(int fd, struct sockaddr *restrict addr, socklen_t *restrict len, int flg)
+#endif  // __EMSCRIPTEN__
 {
 	if (!flg) return accept(fd, addr, len);
 	int ret = socketcall_cp(accept4, fd, addr, len, flg, 0, 0);

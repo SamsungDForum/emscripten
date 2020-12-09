@@ -6,12 +6,14 @@
 
 mergeInto(LibraryManager.library, {
   $SOCKFS__postset: function() {
+#if SOCKET_HOST_BINDINGS
+    addAtInit('if (USE_HOST_BINDINGS) _set_host_bindings_impl();');
+#endif
     addAtInit('SOCKFS.root = FS.mount(SOCKFS, {}, null);');
   },
   $SOCKFS__deps: ['$FS', '$ERRNO_CODES'], // TODO: avoid ERRNO_CODES
   $SOCKFS: {
     mount: function(mount) {
-      SOCKFS.initSocketMap();
       return FS.createNode(null, '/', {{{ cDefine('S_IFDIR') }}} | 511 /* 0777 */, 0);
     },
     createSocket: function(family, type, protocol) {
@@ -73,7 +75,7 @@ mergeInto(LibraryManager.library, {
         flags: FS.modeStringToFlags('r+'),
         seekable: false,
         stream_ops: SOCKFS.stream_ops
-      });
+      }, true);
 
       // map the new stream to the socket structure (sockets have a 1:1
       // relationship with a stream)
@@ -84,31 +86,8 @@ mergeInto(LibraryManager.library, {
 
       return sock;
     },
-    socketMapPtr: {{{ makeStaticAlloc(4096) }}}, // 4096 because this is equal FS.MAX_OPEN_FDS
-    initSocketMap: function() {
-      const ptr = SOCKFS.socketMapPtr >> 2;
-      const count = FS.MAX_OPEN_FDS >> 2;
-      for (let i = 0; i < count; i++) {
-        HEAP32[ptr + i] = 0;
-      }
-    },
-    setSocketFdInMap: function(fd) {
-      if (fd < 0 || fd >= FS.MAX_OPEN_FDS) {
-        return;
-      }
-      HEAP8[SOCKFS.socketMapPtr + fd] = 1;
-    },
-    clearSocketFdInMap: function(fd) {
-      if (fd < 0 || fd >= FS.MAX_OPEN_FDS) {
-        return;
-      }
-      HEAP8[SOCKFS.socketMapPtr + fd] = 0;
-    },
     hasSocket: function(fd) {
-      if (fd < 0 || fd >= FS.MAX_OPEN_FD) {
-        return false;
-      }
-      return HEAP8[SOCKFS.socketMapPtr + fd] === 1;
+      return _is_socket(fd) != 0;
     },
     createSocketOnCurrentThread: function(family, type, protocol, socket) {
       var sock = {
@@ -118,25 +97,36 @@ mergeInto(LibraryManager.library, {
         sock_fd: socket,
         sock_ops: SOCKFS.webengine_sock_ops
       };
-      // create the filesystem node to store the socket structure
+      const tmp_fd = SOCKFS.createStreamOnCurrentThread();
+      sock.stream = FS.getStream(tmp_fd);
+      sock.stream.stream_ops = SOCKFS.stream_ops;
+      sock.stream.node.sock = sock;
+      return sock.stream.fd;
+    },
+    // This allows to use some syscalls (e.g. fcntl) on socket created via
+    // hostbindings, as there is no stream associated with socket descriptor.
+    createStreamOnCurrentThread: function() {
       var name = SOCKFS.nextname();
       var node = FS.createNode(SOCKFS.root, name, {{{ cDefine('S_IFSOCK') }}}, 0);
-      node.sock = sock;
-      // and the wrapping stream that enables library functions such
-      // as read and write to indirectly interact with the socket
       var stream = FS.createStream({
         path: name,
         node: node,
         flags: FS.modeStringToFlags('r+'),
         seekable: false,
-        stream_ops: SOCKFS.stream_ops
-      });
-      sock.stream = stream;
-      return sock.stream.fd;
+        stream_ops: {},
+      }, true);
+      return stream.fd;
     },
     updateStream: function(fd) {
       let stream = FS.getStream(fd);
       if (!stream) {
+#if SOCKET_HOST_BINDINGS
+        if (!ENVIRONMENT_IS_PTHREAD && USE_HOST_BINDINGS) {
+          const tmp_fd = SOCKFS.createStreamOnCurrentThread();
+          FS.moveStream(tmp_fd, fd);
+          return FS.getStream(fd);
+        }
+#endif
         const ptr = __cloneSocketFromRenderThread(fd);
         const family = HEAP32[ptr >> 2];
         const type = HEAP32[(ptr >> 2) + 1];
@@ -326,8 +316,7 @@ mergeInto(LibraryManager.library, {
         return sock.sock_ops.poll(sock);
       },
       ioctl: function(stream, request, varargs) {
-        var sock = stream.node.sock;
-        return sock.sock_ops.ioctl(sock, request, varargs);
+        console.log('SOCKFS ioctl() not implemented');
       },
       read: function(stream, buffer, offset, length, position /* ignored */ ) {
         const sock = stream.node.sock.sock_fd;
@@ -489,7 +478,7 @@ mergeInto(LibraryManager.library, {
             flags: FS.modeStringToFlags('r+'),
             seekable: false,
             stream_ops: SOCKFS.stream_ops
-          });
+          }, true);
 
           // map the new stream to the socket structure (sockets have a 1:1
           // relationship with a stream)
@@ -556,16 +545,16 @@ mergeInto(LibraryManager.library, {
         const data = HEAPU8.subarray(bufPtr, bufPtr + len);
         if (!addrPtr || !addrlenPtr) {
           try {
-            return tizentvwasm.SocketsManager.recv(sock, data, SOCKFS.msgFlagsToJs(flags));
+            return tizentvwasm.SocketsManager.recv(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags));
           } catch (err) {
-            throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+            throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
           }
         }
         let retVal = null;
         try {
-          retVal = tizentvwasm.SocketsManager.recvFrom(sock, data, SOCKFS.msgFlagsToJs(flags));
+          retVal = tizentvwasm.SocketsManager.recvFrom(sock.sock_fd, data, SOCKFS.msgFlagsToJs(flags));
         } catch (err) {
-          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
 
         if (addrPtr && addrlenPtr && retVal.peerAddress != null) {
@@ -594,9 +583,9 @@ mergeInto(LibraryManager.library, {
 
         let ret = null;
         try {
-          ret = tizentvwasm.SocketsManager.recvMsg(sock, msgs, SOCKFS.msgFlagsToJs(flags));
+          ret = tizentvwasm.SocketsManager.recvMsg(sock.sock_fd, msgs, SOCKFS.msgFlagsToJs(flags));
         } catch (err) {
-          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock));
+          throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
         }
         const ret_flags = SOCKFS.msgFlagsFromJs(ret.flags);
         if (name && namelen && ret.peerAddress) {
@@ -1256,14 +1245,10 @@ mergeInto(LibraryManager.library, {
       return result;
     },
   },
-  _getSocketBuffer__proxy: 'sync',
-  _getSocketBuffer: function() {
-    return SOCKFS.getSocketMapPtr();
-  },
   _createSocketOnRenderThread__proxy: 'sync',
   _createSocketOnRenderThread: function(family, type, protocol, socket) {
     const fd = SOCKFS.createSocketOnCurrentThread(family, type, protocol, socket);
-    SOCKFS.setSocketFdInMap(fd);
+    _set_mapped_fd(fd, fd);
     return fd;
   },
   _closeSocketOnRenderThread__proxy: 'sync',
@@ -1273,7 +1258,6 @@ mergeInto(LibraryManager.library, {
       FS.destroyNode(stream.node);
     }
     FS.closeStream(fd);
-    SOCKFS.clearSocketFdInMap(fd);
   },
   _cloneSocketFromRenderThread__proxy: 'sync',
   _cloneSocketFromRenderThread: function(fd) {

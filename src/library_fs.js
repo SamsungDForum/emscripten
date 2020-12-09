@@ -387,15 +387,13 @@ mergeInto(LibraryManager.library, {
     // streams
     //
     MAX_OPEN_FDS: 4096,
-    nextfd: function(fd_start, fd_end) {
-      fd_start = fd_start || 0;
-      fd_end = fd_end || FS.MAX_OPEN_FDS;
-      for (var fd = fd_start; fd <= fd_end; fd++) {
-        if (!FS.streams[fd]) {
-          return fd;
-        }
+    nextfd: function(is_socket) {
+      is_socket = is_socket || 0;
+      ret = _acquire_next_fd(is_socket);
+      if (ret == -1) {
+        throw new FS.ErrnoError({{{ cDefine('EMFILE') }}});
       }
-      throw new FS.ErrnoError({{{ cDefine('EMFILE') }}});
+      return ret;
     },
     getStream: function(fd) {
       return FS.streams[fd];
@@ -403,7 +401,7 @@ mergeInto(LibraryManager.library, {
     // TODO parameterize this function such that a stream
     // object isn't directly passed in. not possible until
     // SOCKFS is completed.
-    createStream: function(stream, fd_start, fd_end) {
+    createStream: function(stream, is_socket) {
       if (!FS.FSStream) {
         FS.FSStream = function(){};
         FS.FSStream.prototype = {};
@@ -430,7 +428,7 @@ mergeInto(LibraryManager.library, {
         newStream[p] = stream[p];
       }
       stream = newStream;
-      var fd = FS.nextfd(fd_start, fd_end);
+      var fd = FS.nextfd(is_socket);
       stream.fd = fd;
       FS.streams[fd] = stream;
       return stream;
@@ -442,8 +440,10 @@ mergeInto(LibraryManager.library, {
       if (fd_src === fd_dst) {
         return;
       }
+      // fd_dst should be already acquired.
       FS.streams[fd_dst] = FS.streams[fd_src];
       FS.streams[fd_src] = null;
+      _release_fd(fd_src);
       FS.streams[fd_dst].fd = fd_dst;
     },
 
@@ -1001,7 +1001,7 @@ mergeInto(LibraryManager.library, {
         timestamp: Math.max(atime, mtime)
       });
     },
-    open: function(path, flags, mode, fd_start, fd_end) {
+    open: function(path, flags, mode) {
       if (path === "") {
         throw new FS.ErrnoError({{{ cDefine('ENOENT') }}});
       }
@@ -1078,7 +1078,7 @@ mergeInto(LibraryManager.library, {
         // used by the file family libc calls (fopen, fwrite, ferror, etc.)
         ungotten: [],
         error: false
-      }, fd_start, fd_end);
+      });
       // call the new stream's open function
       if (stream.stream_ops.open) {
         stream.stream_ops.open(stream);
@@ -1120,6 +1120,7 @@ mergeInto(LibraryManager.library, {
       } finally {
         FS.closeStream(stream.fd);
       }
+      _release_fd(stream.fd);
       stream.fd = null;
     },
     isClosed: function(stream) {

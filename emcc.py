@@ -1188,6 +1188,9 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
       # in strict mode. Code should use the define __EMSCRIPTEN__ instead.
       newargs += ['-DEMSCRIPTEN']
 
+    if shared.Settings.SOCKET_HOST_BINDINGS:
+      newargs += ['-DSOCKET_HOST_BINDINGS']
+
     newargs = shared.COMPILER_OPTS + shared.get_cflags(newargs) + newargs
     if not link_to_object and not compile_only and final_suffix not in executable_endings:
       # TODO(sbc): Remove this emscripten-specific special case.

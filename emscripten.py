@@ -389,7 +389,8 @@ def function_tables_and_exports(funcs, metadata, mem_init, glue, forwarded_data,
   if shared.Settings.WASM:
     add_standard_wasm_imports(sending)
   sorted_sending_keys = sorted(sending.keys())
-  sending = '{ ' + ', '.join('"' + k + '": ' + (host_funcs[sending[k]] if sending[k] in host_funcs else sending[k]) for k in sorted_sending_keys) + ' }'
+  sending = '{ ' + ', '.join('"' + k + '": ' + ('"' + host_funcs[sending[k]] + '"'
+    if sending[k] in host_funcs else sending[k]) for k in sorted_sending_keys) + ' }'
 
   receiving = create_receiving(function_table_data, function_tables_defs,
                                exported_implemented_functions, metadata['initializers'])
@@ -1750,11 +1751,13 @@ asm["%(name)s"] = function() {%(runtime_assertions)s
     receiving += 'Module["asm"] = asm;\n'
     wrappers = []
     for name in module_exports:
+      # We may need these functions before runtime is initialized (e.g. preloading files).
+      fd_funcs = {'_acquire_next_fd', '_release_fd', '_set_mapped_fd', '_is_socket', '_get_mapped_fd'}
       wrappers.append('''\
 var %(name)s = Module["%(name)s"] = function() {%(runtime_assertions)s
   return Module["asm"]["%(name)s"].apply(null, arguments)
 };
-''' % {'name': name, 'runtime_assertions': runtime_assertions})
+''' % {'name': name, 'runtime_assertions': '' if name in fd_funcs else runtime_assertions})
     receiving += '\n'.join(wrappers)
 
   if shared.Settings.EXPORT_FUNCTION_TABLES and not shared.Settings.WASM:

@@ -96,6 +96,7 @@ var LibraryManager = {
       } else {
         libraries.push('library_sockfs.js');
       }
+      libraries.push('library_tizen_socket_host.js');
 
       if (NODERAWFS) {
         // NODERAWFS requires NODEFS

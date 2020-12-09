@@ -5,7 +5,18 @@
 #include "syscall.h"
 #include "libc.h"
 
+#ifdef __EMSCRIPTEN__
+#include "socket_host.h"
+
 ssize_t sendmsg(int fd, const struct msghdr *msg, int flags)
+{
+	return sendmsg_internal(fd, msg, flags);
+}
+
+ssize_t normal_sendmsg(int fd, const struct msghdr *msg, int flags)
+#else
+ssize_t sendmsg(int fd, const struct msghdr *msg, int flags)
+#endif  // __EMSCRIPTEN__
 {
 #if LONG_MAX > INT_MAX
 	struct msghdr h;

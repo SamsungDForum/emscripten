@@ -3,7 +3,18 @@
 #include "syscall.h"
 #include "libc.h"
 
+#ifdef __EMSCRIPTEN__
+#include "socket_host.h"
+
 ssize_t recvmsg(int fd, struct msghdr *msg, int flags)
+{
+	return recvmsg_internal(fd, msg, flags);
+}
+
+ssize_t normal_recvmsg(int fd, struct msghdr *msg, int flags)
+#else
+ssize_t recvmsg(int fd, struct msghdr *msg, int flags)
+#endif  // __EMSCRIPTEN__
 {
 	ssize_t r;
 #if LONG_MAX > INT_MAX

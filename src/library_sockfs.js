@@ -782,5 +782,7 @@ mergeInto(LibraryManager.library, {
   emscripten_set_socket_close_callback__deps: ['__set_network_callback'],
   emscripten_set_socket_close_callback: function(userData, callback) {
     ___set_network_callback('close', userData, callback);
-  }
+  },
+  // No-op, required only for compilation.
+  _closeSocketOnRenderThread: function(fd) {}
 });

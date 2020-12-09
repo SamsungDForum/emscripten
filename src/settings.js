@@ -1533,6 +1533,11 @@ var ENVIRONMENT_MAY_BE_TIZEN = 1;
 // If true, library_tizen_emss will log extra debug information.
 var TIZEN_EMSS_DEBUG = 0;
 
+// If true, then check for hostbindings availability will be performed during
+// instantiation. When possible hostbindings will be used for implementation of
+// socket calls, otherwise it will fall back into JS API.
+var SOCKET_HOST_BINDINGS = 1;
+
 // If set to 1, all JS libraries will be automaticially available at link time.
 // This gets set to 0 in STRICT mode (or with MINIMAL_RUNTIME) which mean you
 // need to explictly specify -lfoo.js in at link time in order to access

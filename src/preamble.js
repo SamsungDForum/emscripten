@@ -917,9 +917,43 @@ var wasmOffsetConverter;
 #include "wasm_offset_converter.js"
 #endif
 
+#if ENVIRONMENT_MAY_BE_TIZEN
+let USE_HOST_BINDINGS = true;
+#endif
+
 // Create the wasm instance.
 // Receives the wasm imports, returns the exports.
 function createWasm() {
+  // Host binding function names are stored in `asmLibraryArgs` as strings.
+  // Replace them with real functions when possible.
+  for (const k in asmLibraryArg) {
+    if (typeof asmLibraryArg[k] !== 'string') {
+      continue;
+    }
+#if !ENVIRONMENT_MAY_BE_TIZEN
+    asmLibraryArg[k] = () => {};
+    continue;
+#else
+    let available = true;
+    const componentList = asmLibraryArg[k].split('.');
+    let component = self;
+    for (const x of componentList) {
+      if (typeof component[x] === 'undefined') {
+        available = false;
+        break;
+      }
+      component = component[x];
+    }
+    if (available) {
+      asmLibraryArg[k] = component;
+    } else {
+      USE_HOST_BINDINGS = false;
+      // Insert some dummy function here, we won't use it anyway.
+      asmLibraryArg[k] = () => {};
+    }
+#endif
+  }
+
   // prepare imports
   var info = {
     'env': asmLibraryArg,

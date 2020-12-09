@@ -190,6 +190,16 @@ this.onmessage = function(e) {
       PThread.receiveObjectTransfer(e.data);
       PThread.setThreadStatus(Module['_pthread_self'](), 1/*EM_THREAD_STATUS_RUNNING*/);
 
+#if ENVIRONMENT_MAY_BE_TIZEN
+      if (!USE_HOST_BINDINGS) {
+        // Close all socket streams opened by the previous thread.
+        for (let i = 3; i < FS.streams.length; i++) {
+          // No `if` as only socket streams can be opened on side threads.
+          FS.closeStream(i);
+        }
+      }
+#endif
+
       try {
         // pthread entry points are always of signature 'void *ThreadMain(void *arg)'
         // Native codebases sometimes spawn threads with other thread entry point signatures,

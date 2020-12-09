@@ -29,7 +29,7 @@ logger = logging.getLogger('system_libs')
 LIBC_SOCKETS = ['socket.c', 'socketpair.c', 'shutdown.c', 'bind.c', 'connect.c',
                 'listen.c', 'accept.c', 'getsockname.c', 'getpeername.c', 'send.c',
                 'recv.c', 'sendto.c', 'recvfrom.c', 'sendmsg.c', 'recvmsg.c',
-                'getsockopt.c', 'setsockopt.c', 'freeaddrinfo.c']
+                'getsockopt.c', 'setsockopt.c', 'freeaddrinfo.c', 'socket_host.c']
 
 
 def files_in_path(path_components, filenames):
@@ -1531,6 +1531,12 @@ def calculate(temp_files, in_temp, stdout_, stderr_, forced=[]):
     add_library(system_libs_map['libsockets_proxy'])
   else:
     add_library(system_libs_map['libsockets'])
+
+  # These, although necessary, won't be exported when `socketcall` is not used in user files.
+  if shared.Settings.ENVIRONMENT_MAY_BE_TIZEN:
+    always_export = ['ntohs', 'htons']
+    for symbol in always_export:
+      shared.Settings.EXPORTED_FUNCTIONS.append(mangle_c_symbol_name(symbol))
 
   libs_to_link.sort(key=lambda x: x[0].endswith('.a')) # make sure to put .a files at the end.
 

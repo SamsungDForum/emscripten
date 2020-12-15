@@ -1154,9 +1154,19 @@ var LibraryPThread = {
       if (ret === 'ok') return 0;
       throw 'Atomics.wait returned an unexpected value ' + ret;
     } else {
+      // Register globally which address the main thread is simulating to be waiting on. When zero, main thread is not waiting on anything,
+      // and on nonzero, the contents of address pointed by __main_thread_futex_wait_address tell which address the main thread is simulating its wait on.
+      // Do this *before* checking value in addr memory location, to avoid situation when side thread tries
+      // to wake us after we checked the memory value and before we set up that we are waiting on this address.
+      const oldAddr = Atomics.exchange(HEAP32, __main_thread_futex_wait_address >> 2, addr);
+
       // Atomics.wait is not available in the main browser thread, so simulate it via busy spinning.
       var loadedVal = Atomics.load(HEAP32, addr >> 2);
-      if (val != loadedVal) return -{{{ cDefine('EWOULDBLOCK') }}};
+
+      if (val != loadedVal) {
+        Atomics.store(HEAP32, __main_thread_futex_wait_address >> 2, oldAddr);
+        return -{{{ cDefine('EWOULDBLOCK') }}};
+      }
 
       var tNow = performance.now();
       var tEnd = tNow + timeout;
@@ -1165,9 +1175,6 @@ var LibraryPThread = {
       PThread.setThreadStatusConditional(_pthread_self(), {{{ cDefine('EM_THREAD_STATUS_RUNNING') }}}, {{{ cDefine('EM_THREAD_STATUS_WAITFUTEX') }}});
 #endif
 
-      // Register globally which address the main thread is simulating to be waiting on. When zero, main thread is not waiting on anything,
-      // and on nonzero, the contents of address pointed by __main_thread_futex_wait_address tell which address the main thread is simulating its wait on.
-      const oldAddr = Atomics.exchange(HEAP32, __main_thread_futex_wait_address >> 2, addr);
       var ourWaitAddress = addr; // We may recursively re-enter this function while processing queued calls, in which case we'll do a spurious wakeup of the older wait operation.
       while (addr == ourWaitAddress) {
         tNow = performance.now();

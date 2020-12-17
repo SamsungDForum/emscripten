@@ -1,5 +1,8 @@
 #include "pthread_impl.h"
 
+void __pthread_testcancel(void);
+int __pthread_setcancelstate(int, int *);
+
 int __pthread_mutex_timedlock(pthread_mutex_t *restrict m, const struct timespec *restrict at)
 {
 	if ((m->_m_type&15) == PTHREAD_MUTEX_NORMAL
@@ -28,6 +31,12 @@ int __pthread_mutex_timedlock(pthread_mutex_t *restrict m, const struct timespec
 		a_dec(&m->_m_waiters);
 		if (r && r != EINTR) break;
 	}
+
+#ifdef __EMSCRIPTEN__
+	if (r == ECANCELED) {
+		__pthread_testcancel();
+	}
+#endif
 	return r;
 }
 

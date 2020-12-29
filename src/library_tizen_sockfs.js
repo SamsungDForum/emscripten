@@ -304,13 +304,19 @@ mergeInto(LibraryManager.library, {
         [ ErrorCodes.EHWPOISON, {{{ cDefine('EHWPOISON') }}} ]
       ]);
 
-      const error = (typeof sock_fd == 'undefined' ?
-          tizentvwasm.SocketsManager.getErrorCode() :
-          tizentvwasm.SocketsManager.getErrorCode(sock_fd));
-      if (errorCodesMap.has(error)) {
-        return errorCodesMap.get(error);
-      } else {
-        return 0;
+      try {
+        const error = (typeof sock_fd == 'undefined' ?
+            tizentvwasm.SocketsManager.getErrorCode() :
+            tizentvwasm.SocketsManager.getErrorCode(sock_fd));
+        if (errorCodesMap.has(error)) {
+          return errorCodesMap.get(error);
+        } else if (error != 0) {
+          return {{{ cDefine('EINVAL') }}};
+        } else {
+          return 0;
+        }
+      } catch (err) {
+        return {{{ cDefine('EBADF') }}};
       }
     },
     // node and stream ops are backend agnostic
@@ -344,9 +350,14 @@ mergeInto(LibraryManager.library, {
       close: function(stream) {
         const sock = stream.node.sock;
         const fd = stream.fd;
-        sock.sock_ops.close(sock);
+
+        // First clean JS helper structs
         FS.destroyNode(stream.node);
         FS.closeStream(stream);
+
+        sock.sock_ops.close(sock);
+
+        // Close socket on render thread only when closing socket succeeds
         __closeSocketOnRenderThread(fd);
       }
     },
@@ -390,14 +401,15 @@ mergeInto(LibraryManager.library, {
         return SOCKFS.pollEventsConvertFromJS(poll_fd.revents);
       },
       ioctl: function(sock, request, arg) {
-        console.log("SOCKFS ioctl() not implemented");
+        console.log('SOCKFS ioctl() not implemented');
       },
       close: function(sock) {
         try {
           tizentvwasm.SocketsManager.close(sock.sock_fd);
-          sock.sock_fd = -1; // mark thas socket is closed
         } catch (err) {
           throw new FS.ErrnoError(SOCKFS.getErrorCode(sock.sock_fd));
+        } finally {
+          sock.sock_fd = -1; // mark that socket as "closed"
         }
         return 0;
       },

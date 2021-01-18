@@ -22,6 +22,7 @@ typedef enum EMSSElementaryMediaTrackCloseReason {
   ElementaryMediaTrackCloseReasonSourceClosed = 0,
   ElementaryMediaTrackCloseReasonSourceError,
   ElementaryMediaTrackCloseReasonSourceDetached,
+  ElementaryMediaTrackCloseReasonSourceSuspended,
   ElementaryMediaTrackCloseReasonTrackDisabled,
   ElementaryMediaTrackCloseReasonTrackEnded,
   ElementaryMediaTrackCloseReasonTrackSeeking,

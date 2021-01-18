@@ -49,6 +49,9 @@ class ElementaryMediaTrack final {
     /// Source was detached from `html::HTMLMediaElement`.
     kSourceDetached,
 
+    /// This `ElementaryMediaStreamSource` has been suspended.
+    kSourceSuspended,
+
     /// This `ElementaryMediaTrack` has been disabled.
     kTrackDisabled,
 

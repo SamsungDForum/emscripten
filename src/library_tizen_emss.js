@@ -1926,22 +1926,24 @@ const LibraryTizenEmss = {
         SOURCE_CLOSED: 0,
         SOURCE_ERROR: 1,
         SOURCE_DETACHED: 2,
-        TRACK_DISABLED: 3,
-        TRACK_ENDED: 4,
-        TRACK_SEEKING: 5,
-        UNKNOWN: 6,
+        SOURCE_SUSPENDED: 3,
+        TRACK_DISABLED: 4,
+        TRACK_ENDED: 5,
+        TRACK_SEEKING: 6,
+        UNKNOWN: 7,
       });
 
       // JS -> C++ conversion maps
 
       const STR_TO_CLOSE_REASON = new Map([
-        ['sourceclosed',   CloseReason.SOURCE_CLOSED   ],
-        ['sourceerror',    CloseReason.SOURCE_ERROR    ],
-        ['sourcedetached', CloseReason.SOURCE_DETACHED ],
-        ['trackdisabled',  CloseReason.TRACK_DISABLED  ],
-        ['trackended',     CloseReason.TRACK_ENDED     ],
-        ['trackseeking',   CloseReason.TRACK_SEEKING   ],
-        ['unknown',        CloseReason.UNKNOWN         ],
+        ['sourceclosed',    CloseReason.SOURCE_CLOSED    ],
+        ['sourceerror',     CloseReason.SOURCE_ERROR     ],
+        ['sourcedetached',  CloseReason.SOURCE_DETACHED  ],
+        ['sourcesuspended', CloseReason.SOURCE_SUSPENDED ],
+        ['trackdisabled',   CloseReason.TRACK_DISABLED   ],
+        ['trackended',      CloseReason.TRACK_ENDED      ],
+        ['trackseeking',    CloseReason.TRACK_SEEKING    ],
+        ['unknown',         CloseReason.UNKNOWN          ],
       ]);
 
       WasmElementaryMediaTrack = {

@@ -23,7 +23,7 @@ struct EmssVersionInfo {
   ///
   /// @remark
   /// If this is `true` some limitations apply. For details, please see
-  /// [a note on compatibility on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/usage-guide.html#note-on-compatibility).
+  /// [a note on compatibility on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/wasm-player-usage-guide.html#note-on-compatibility).
   bool has_legacy_emss;
 
   /// `ElementaryMediaStreamSource::Mode::kVideoTexture` is supported on this

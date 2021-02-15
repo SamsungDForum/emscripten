@@ -55,6 +55,7 @@ struct ElementaryVideoTrackConfig;
 ///
 /// * [Tizen WASM Player Docs on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/overview.html)
 /// * [Tizen WASM Player Sample (Normal Latency) on GitHub](https://github.com/SamsungDForum/WebAssemblyDemos/tree/master/wasm_player_sample)
+/// * [Tizen WASM Player Sample (Video Decoder) on GitHub](https://github.com/SamsungDForum/WebAssemblyDemos/tree/master/video_decoder_sample)
 /// * [Moonlight ported to TizenTV WASM (Low Latency) on GitHub](https://github.com/SamsungDForum/moonlight-chrome)
 
 /// @brief
@@ -138,7 +139,7 @@ struct ElementaryVideoTrackConfig;
 /// Player. Since this mode is intended for live sources, usually it's a good
 /// idea to hand packets to the source right after they are received by App.
 ///
-/// @sa [Detailed WASM Player Usage Guide on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/usage-guide.html)
+/// @sa [Detailed WASM Player Usage Guide on Samsung Developers](https://developer.samsung.com/smarttv/develop/extension-libraries/webassembly/tizen-wasm-player/wasm-player-usage-guide.html)
 class ElementaryMediaStreamSource final {
  public:
   /// Defines modes in which `ElementaryMediaStreamSource` can operate. The mode

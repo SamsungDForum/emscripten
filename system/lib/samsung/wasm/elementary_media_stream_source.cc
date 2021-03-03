@@ -5,6 +5,10 @@
 
 #include "samsung/wasm/elementary_media_stream_source.h"
 
+#include <algorithm>
+#include <cctype>
+#include <iterator>
+#include <string>
 #include <utility>
 
 #include "samsung/bindings/common.h"
@@ -53,6 +57,84 @@ const EMSSDecodingMode kIgnoreDecodingMode = static_cast<EMSSDecodingMode>(-1);
           config.height,
           config.framerate_num,
           config.framerate_den};
+}
+
+std::string StripWhiteSpace(const std::string& str) {
+  auto it_first = std::find_if_not(
+      str.begin(), str.end(), [](unsigned char c) { return std::isspace(c); });
+  auto it_last =
+      std::find_if_not(str.rbegin(), str.rend(), [](unsigned char c) {
+        return std::isspace(c);
+      }).base();
+  if (it_first < it_last)
+    return std::string(it_first, it_last);
+  else
+    return "";
+}
+
+std::string ToLower(const std::string& str) {
+  std::string result = str;
+  std::transform(result.begin(), result.end(), result.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return result;
+}
+
+std::vector<std::string> SplitMimeParameters(const std::string& mime_type) {
+  std::vector<std::string> result;
+  std::string stripped_mime = StripWhiteSpace(mime_type);
+  std::string::iterator last_start = stripped_mime.begin();
+  bool is_quoted = false;
+
+  for (auto it = stripped_mime.begin(); it != stripped_mime.end(); ++it) {
+    if (*it == ';' && !is_quoted) {
+      std::string param(last_start, it);
+      result.push_back(StripWhiteSpace(param));
+      last_start = it + 1;
+      continue;
+    }
+
+    if (*it == '\"') {
+      is_quoted = !is_quoted;
+    }
+  }
+
+  result.emplace_back(last_start, stripped_mime.end());
+  return result;
+}
+
+std::string GetMimeParameter(const std::string& mime_type,
+                             const std::string& parameter_name) {
+  std::string look_for_name = StripWhiteSpace(parameter_name);
+  look_for_name = ToLower(look_for_name);
+
+  std::vector<std::string> parameters = SplitMimeParameters(mime_type);
+  for (auto param : parameters) {
+    auto equal_sign_pos = param.find('=');
+    if (equal_sign_pos == std::string::npos)
+      continue;
+
+    std::string name(param.begin(), param.begin() + equal_sign_pos);
+    name = ToLower(StripWhiteSpace(name));
+
+    std::string value(param.begin() + equal_sign_pos + 1, param.end());
+    value = StripWhiteSpace(value);
+    value.erase(std::remove(value.begin(), value.end(), '\"'), value.end());
+
+    if (look_for_name == name)
+      return value;
+  }
+
+  return "";
+}
+
+OperationResult EarlyValidateAudioConfig(
+    const ElementaryAudioTrackConfig& config) {
+  bool pcm_codec = GetMimeParameter(config.mime_type, "codecs") == "pcm";
+
+  if (pcm_codec && config.sample_format != SampleFormat::kS16)
+    return OperationResult::kConfigInvalidSampleFormat;
+
+  return OperationResult::kSuccess;
 }
 
 void OnPlaybackPositionChangedListenerCallback(float new_time,
@@ -137,14 +219,20 @@ bool ElementaryMediaStreamSource::IsValid() const {
 Result<ElementaryMediaTrack> ElementaryMediaStreamSource::AddTrack(
     const ElementaryAudioTrackConfig& config) {
   using TrackType = ElementaryMediaTrack::TrackType;
+  auto early_config_validation_result = EarlyValidateAudioConfig(config);
+  if (early_config_validation_result != OperationResult::kSuccess)
+    return {ElementaryMediaTrack{}, early_config_validation_result};
+
   auto CAPIConfig = ConfigToCAPI(config, version_info_);
   const auto result = CAPICall<int>(EMSSAddAudioTrack, handle_, &CAPIConfig);
   if (result.operation_result != OperationResult::kSuccess)
     return {ElementaryMediaTrack{}, result.operation_result};
+
   auto track = ElementaryMediaTrack{result.value, TrackType::kAudio,
                                     version_info_, use_session_id_emulation_};
   if (!track.IsValid())
     return {ElementaryMediaTrack{}, OperationResult::kFailed};
+
   return {std::move(track), OperationResult::kSuccess};
 }
 

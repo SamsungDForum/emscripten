@@ -66,6 +66,10 @@ enum class ChannelLayout {
 };
 
 /// Contains audio `ElementaryMediaTrack` config.
+///
+/// @remark
+/// Currently, if audio is encoded in PCM (codecs="pcm" in MIME type),
+/// the only supported sample format is kS16
 struct ElementaryAudioTrackConfig final : ElementaryMediaTrackConfig {
   ElementaryAudioTrackConfig() : ElementaryMediaTrackConfig() {}
 
